@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
+    <title>canvas demo</title>
+    <style>
+	  * {
+        -webkit-touch-callout:none;
+        -webkit-user-select:none;
+        -khtml-user-select:none;
+        -moz-user-select:none;
+        -ms-user-select:none;
+        user-select:none;
+      }
+      #log {
+        height: 200px;
+        width: 300px;
+        overflow: scroll;
+      }
+	  .button {
+		/*margin-right: 100px;*/
+		margin-top: 20px;
+		margin-bottom: 20px;
+		margin-left: 100px;
+		width: 70px;
+ 		height: 40px;
+		transform: rotate(0.25turn)
+	  }
+    </style>
+  </head>
+  <body>
+    <div><canvas id="canvas" style="border:solid black 1px;"></canvas><div>
+	<div><button id="btn1" class="button">打枪</button></div>
+	<div><button id="btn2" class="button">滴滴</button></div>
+    <br />
+    Log:
+    <pre id="log" style="border: 1px solid #ccc;"></pre>
+	<script>
+	  window.oncontextmenu=function(e){
+        e.preventDefault();
+      };
+	</script>
+    <script src="HttpPost.js"></script>
+    <script src="ControlPanel.js"></script>
+  </body>
+</html>
