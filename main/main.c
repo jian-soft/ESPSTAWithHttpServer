@@ -62,9 +62,8 @@ esp_err_t init_fs(void)
 
 void app_main(void)
 {
-
-
-    wifi_init_softap();
+    //wifi_init_softap();
+    wifi_init_sta();
 
     pwm_init();
     gpio_init();
