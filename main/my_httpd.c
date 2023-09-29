@@ -310,8 +310,14 @@ static esp_err_t echo_post_handler(httpd_req_t *req)
         }
         else if (0 == strcmp(type_string, "pitch")) {
             cJSON *item = cJSON_GetObjectItem(root, "value");
-            ESP_LOGI(TAG, "pitch: value:%d", item->valueint);
-            sound_play_square(item->valueint);
+            int pitch = item->valueint;
+            if (pitch < 0 || pitch > 7) {
+                goto out;
+            }
+            ESP_LOGI(TAG, "pitch: value:%d", pitch);
+
+            float p2f[] = {261.626, 293.665, 329.628, 349.228, 391.995, 440.000, 493.883, 523.251};
+            sound_play_freq(p2f[pitch]);
         }
         break;
     }

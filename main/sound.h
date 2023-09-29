@@ -9,8 +9,7 @@ extern "C" {
 void sound_init(void);
 void sound_play_didi(void);
 void sound_play_gun(void);
-void sound_play_square(int freq);
-
+void sound_play_freq(float freq);
 
 
 

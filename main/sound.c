@@ -55,8 +55,14 @@ static int16_t square_tick(int idx)
 }
 #define BUFF_SIZE 512
 int16_t buffer[BUFF_SIZE];
-static void i2s_task_play_square(void *args)
+static void i2s_task_play_freq(void *args)
 {
+    float freq = *((float *)args);
+    if (0 == freq) {
+        vTaskDelete(NULL);
+        return;
+    }
+
     esp_err_t ret = ESP_OK;
     ret = xSemaphoreTake(g_i2s_mutex, 0);
     if (pdTRUE != ret) {
@@ -65,12 +71,7 @@ static void i2s_task_play_square(void *args)
     }
 
     size_t bytes_write = 0, total_write = 0;
-
-    int pitch = (int) args;
-    float freq = 440;
-    float p2f[] = {261.626, 293.665, 329.628, 349.228, 391.995, 440.000, 493.883, 523.251};
-    freq = p2f[pitch];
-    ESP_LOGI(TAG, "i2s_task_play_square: freq:%f", freq);
+    ESP_LOGI(TAG, "i2s_task_play_freq: freq:%f", freq);
     square_init(freq);
 
     ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
@@ -94,7 +95,6 @@ static void i2s_task_play_square(void *args)
         }
     }
 
-
     ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
 
     ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
@@ -102,6 +102,7 @@ static void i2s_task_play_square(void *args)
     vTaskDelete(NULL);
 
 }
+
 
 static void i2s_write_task_16(void *args)
 {
@@ -209,10 +210,11 @@ void sound_play_gun()
     xTaskCreate(i2s_write_task_16, "play_gun_task", 4096, (void *)gun_pcm_start, 5, NULL);
 }
 
-void sound_play_square(int pitch)
+void sound_play_freq(float freq)
 {
-    if (pitch < 0 || pitch > 7) return;
-
-    xTaskCreate(i2s_task_play_square, "play_sqr_task", 4096, (void *)pitch, 5, NULL);
+    static float t;
+    t = freq;
+    xTaskCreate(i2s_task_play_freq, "play_freq_task", 4096, (void *)(&t), 5, NULL);
 }
+
 

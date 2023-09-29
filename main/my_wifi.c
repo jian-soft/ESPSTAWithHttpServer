@@ -7,7 +7,7 @@
 #include "lwip/sys.h"
 #include "mdns.h"
 #include "my_httpd.h"
-#include "drv8833_pwm.h"
+#include "my_udp.h"
 
 
 static const char *TAG = "wifi";
@@ -89,11 +89,10 @@ static void initialise_mdns(void)
     mdns_instance_name_set("smart car service");
 
     mdns_txt_item_t serviceTxtData[] = {
-        {"board", "esp32"},
-        {"path", "/"}
+        {"company", "Jiansoft"}
     };
 
-    ESP_ERROR_CHECK(mdns_service_add(NULL, "_car", "_udp", 8000, serviceTxtData,
+    ESP_ERROR_CHECK(mdns_service_add(NULL, "_car", "_udp", 9000, serviceTxtData,
                                      sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
 }
 
@@ -112,6 +111,7 @@ static void station_event_handler(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         start_webserver();
+        udp_create_server_task();
     }
 }
 

@@ -9,6 +9,8 @@ idf_component_register(
 		"led_strip.c"
 		"led_strip_encoder.c"
 		"my_adc.c"
+		"my_udp.c"
+		"handle_message.c"
 	INCLUDE_DIRS "."
 	EMBED_FILES
 		"gun_s8_16k_mono.pcm"
