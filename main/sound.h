@@ -10,7 +10,7 @@ void sound_init(void);
 void sound_play_didi(void);
 void sound_play_gun(void);
 void sound_play_freq(float freq);
-
+void sound_play_mp3();
 
 
 #ifdef __cplusplus

@@ -1,15 +1,33 @@
 dependencies:
+  espressif/esp-dsp:
+    component_hash: fa5569422410f2929c7b70f5a67369f53ed1a508e612a2ece556593fa32b6f63
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.4.7
+  espressif/jsmn:
+    component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.1.0
   espressif/mdns:
     component_hash: d6665090cf41eb399c184aab6f34234251a773e052fb53ca044dcb576264c646
     source:
       service_url: https://api.components.espressif.com/
       type: service
     version: 1.2.1
+  espressif/nghttp:
+    component_hash: 91762e35cf483c5fbf67b15e06da9ec380d34603201a871777bbe673750d75c0
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.52.0~1
   idf:
     component_hash: null
     source:
       type: idf
     version: 5.1.1
-manifest_hash: 31df8df73e24d450f264f4ba5e2523f805c2d1c4184feeb53be9c3ecf5eb4289
+manifest_hash: 0eb224b11480e63e026093f33b283d3bb043bd03fe81e576c4967c5162deba6f
 target: esp32c3
 version: 1.0.0

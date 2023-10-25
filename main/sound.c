@@ -14,6 +14,7 @@
 #include "esp_check.h"
 #include "io_assignment.h"
 #include <math.h>
+#include "my_play_mp3.h"
 
 #define VOLUME_SCALE                1
 
@@ -104,10 +105,62 @@ static void i2s_task_play_freq(void *args)
 }
 
 
+static void i2s_task_play_mp3(void *args)
+{
+    static char raw_buffer[1024];
+    int read_len;
+
+    esp_err_t ret = ESP_OK;
+    ret = xSemaphoreTake(g_i2s_mutex, 0);
+    if (pdTRUE != ret) {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    size_t bytes_write = 0, total_write = 0;
+
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
+
+    while(1) {
+        read_len = play_mp3_read_buffer(raw_buffer, sizeof(raw_buffer));
+        if (read_len <= 0) {
+            break;
+        }
+
+        ret = i2s_channel_write(tx_chan, raw_buffer, read_len, &bytes_write, portMAX_DELAY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
+            abort();
+        }
+        if (bytes_write > 0) {
+           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
+           total_write += bytes_write;
+        } else {
+           ESP_LOGE(TAG, "[music] i2s music play falied.");
+           abort();
+        }
+    }
+
+    ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
+
+    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
+    xSemaphoreGive(g_i2s_mutex);
+    vTaskDelete(NULL);
+
+}
+
+
 static void i2s_write_task_16(void *args)
 {
     esp_err_t ret = ESP_OK;
-    size_t bytes_write = 0, total_write = 0;
+
+    ret = xSemaphoreTake(g_i2s_mutex, 0);
+    if (pdTRUE != ret) {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    size_t bytes_write = 0;
 
     const int8_t *music_start = (int8_t *)args;
     size_t size;
@@ -119,16 +172,23 @@ static void i2s_write_task_16(void *args)
 
     ESP_LOGI(TAG, "the music size: %d", size);
 
-    size_t i;
-    int16_t le_data[4];
-
-    ret = xSemaphoreTake(g_i2s_mutex, 0);
-    if (pdTRUE != ret) {
-        vTaskDelete(NULL);
-        return;
-    }
+    //size_t i;
+    //int16_t le_data[4];
 
     ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
+    ret = i2s_channel_write(tx_chan, music_start, size, &bytes_write, portMAX_DELAY);
+    if (ret != ESP_OK) {
+       ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
+       abort();
+    }
+    if (bytes_write > 0) {
+       ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
+    } else {
+       ESP_LOGE(TAG, "[music] i2s music play failed.");
+       abort();
+    }
+
+/*
     for (i = 0; i < size; i += 4) {
         le_data[0] = (music_start[i] << 8)/VOLUME_SCALE;
         le_data[1] = (music_start[i + 1] << 8)/VOLUME_SCALE;
@@ -150,6 +210,7 @@ static void i2s_write_task_16(void *args)
     }
 
     ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
+*/
     ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
     xSemaphoreGive(g_i2s_mutex);
     vTaskDelete(NULL);
@@ -217,4 +278,9 @@ void sound_play_freq(float freq)
     xTaskCreate(i2s_task_play_freq, "play_freq_task", 4096, (void *)(&t), 5, NULL);
 }
 
+
+void sound_play_mp3()
+{
+    xTaskCreate(i2s_task_play_mp3, "play_mp3_task", 4096, NULL, 5, NULL);
+}
 

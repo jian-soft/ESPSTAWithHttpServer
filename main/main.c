@@ -24,6 +24,7 @@
 #include "sound.h"
 #include "led_strip.h"
 #include "my_adc.h"
+#include "my_play_mp3.h"
 
 static const char *TAG = "fs";
 
@@ -84,5 +85,7 @@ void app_main(void)
     //    vTaskDelay(1000 / portTICK_PERIOD_MS);
     //    ESP_LOGI(TAG, "m1s:%d, m2s:%d\n", get_m1_cnt(), get_m2_cnt());
     //}
+
+    play_mp3_init_and_run();
 
 }
