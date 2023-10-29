@@ -23,8 +23,9 @@
 #include "mp3_decoder.h"
 #include "sound.h"
 
-static const char *TAG = "PLAY_FLASH_MP3_CONTROL";
-
+static const char *TAG = "PLAY_MP3";
+static audio_pipeline_handle_t g_pipeline;
+static audio_element_handle_t g_mp3_decoder;
 static audio_element_handle_t g_raw_writer;
 
 static struct marker {
@@ -33,34 +34,53 @@ static struct marker {
     const uint8_t *end;
 } file_marker;
 
-// low rate mp3 audio
-extern const uint8_t lr_mp3_start[] asm("_binary_music_1c_16khz_mp3_start");
-extern const uint8_t lr_mp3_end[]   asm("_binary_music_1c_16khz_mp3_end");
+
+extern const uint8_t didi_start[] asm("_binary_didi_1c_16khz_mp3_start");
+extern const uint8_t didi_end[]   asm("_binary_didi_1c_16khz_mp3_end");
+extern const uint8_t gun_start[] asm("_binary_gun_1c_16khz_mp3_start");
+extern const uint8_t gun_end[]   asm("_binary_gun_1c_16khz_mp3_end");
+extern const uint8_t canon_start[] asm("_binary_canon_1c_16khz_21s_mp3_start");
+extern const uint8_t canon_end[]   asm("_binary_canon_1c_16khz_21s_mp3_end");
+extern const uint8_t croatian_start[] asm("_binary_Croatian_1c_16khz_12s_mp3_start");
+extern const uint8_t croatian_end[]   asm("_binary_Croatian_1c_16khz_12s_mp3_end");
+extern const uint8_t galway_start[] asm("_binary_Galway_1c_16khz_18s_mp3_start");
+extern const uint8_t galway_end[]   asm("_binary_Galway_1c_16khz_18s_mp3_end");
+extern const uint8_t vivacity_start[] asm("_binary_Vivacity_1c_16khz_20s_mp3_start");
+extern const uint8_t vivacity_end[]   asm("_binary_Vivacity_1c_16khz_20s_mp3_end");
+extern const uint8_t aiyaya_start[] asm("_binary_aiyaya_1c_16khz_23s_mp3_start");
+extern const uint8_t aiyaya_end[]   asm("_binary_aiyaya_1c_16khz_23s_mp3_end");
 
 
-static void set_next_file_marker()
+
+static void set_next_file_marker(int fileid)
 {
-    static int idx = 0;
+    static uint8_t *mp3_start[] = {
+            didi_start,
+            gun_start,
+            canon_start,
+            croatian_start,
+            galway_start,
+            vivacity_start,
+            aiyaya_start
+        };
+    static uint8_t *mp3_end[] = {
+            didi_end,
+            gun_end,
+            canon_end,
+            croatian_end,
+            galway_end,
+            vivacity_end,
+            aiyaya_end
+        };
 
-    switch (idx) {
-        case 0:
-            file_marker.start = lr_mp3_start;
-            file_marker.end   = lr_mp3_end;
-            break;
-        case 1:
-            file_marker.start = lr_mp3_start;
-            file_marker.end   = lr_mp3_end;
-            break;
-        case 2:
-            file_marker.start = lr_mp3_start;
-            file_marker.end   = lr_mp3_end;
-            break;
-        default:
-            ESP_LOGE(TAG, "[ * ] Not supported index = %d", idx);
+
+    if (fileid < 0 || fileid >= 7) {
+        fileid = 0;
     }
-    if (++idx > 2) {
-        idx = 0;
-    }
+
+    file_marker.start = mp3_start[fileid];
+    file_marker.end   = mp3_end[fileid];
+
     file_marker.pos = 0;
 }
 
@@ -77,14 +97,60 @@ int mp3_music_read_cb(audio_element_handle_t el, char *buf, int len, TickType_t 
     return read_size;
 }
 
-
 void play_mp3_init(void)
 {
+    ESP_LOGI(TAG, "[ 2 ] Create audio pipeline, add all elements to pipeline, and subscribe pipeline event");
+    audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
+    g_pipeline = audio_pipeline_init(&pipeline_cfg);
+    mem_assert(g_pipeline);
 
+    ESP_LOGI(TAG, "[2.1] Create mp3 decoder to decode mp3 file and set custom read callback");
+    mp3_decoder_cfg_t mp3_cfg = DEFAULT_MP3_DECODER_CONFIG();
+    g_mp3_decoder = mp3_decoder_init(&mp3_cfg);
+    audio_element_set_read_cb(g_mp3_decoder, mp3_music_read_cb, NULL);
 
+    ESP_LOGI(TAG, "[2.2] Create raw stream");
+    raw_stream_cfg_t raw_cfg = RAW_STREAM_CFG_DEFAULT();
+    raw_cfg.type = AUDIO_STREAM_READER;
+    g_raw_writer = raw_stream_init(&raw_cfg);
 
+    ESP_LOGI(TAG, "[2.3] Register all elements to audio pipeline");
+    audio_pipeline_register(g_pipeline, g_mp3_decoder, "mp3");
+    audio_pipeline_register(g_pipeline, g_raw_writer, "raw");
+
+    ESP_LOGI(TAG, "[2.4] Link it together [mp3_music_read_cb]-->mp3_decoder-->i2s_stream-->[codec_chip]");
+    const char *link_tag[2] = {"mp3", "raw"};
+    audio_pipeline_link(g_pipeline, &link_tag[0], 2);
 }
 
+void play_mp3_deinit(void)
+{
+    ESP_LOGI(TAG, "[ 6 ] Stop audio_pipeline");
+    audio_pipeline_stop(g_pipeline);
+    audio_pipeline_wait_for_stop(g_pipeline);
+    audio_pipeline_terminate(g_pipeline);
+    audio_pipeline_unregister(g_pipeline, g_mp3_decoder);
+    audio_pipeline_unregister(g_pipeline, g_raw_writer);
+
+    /* Release all resources */
+    audio_pipeline_deinit(g_pipeline);
+    audio_element_deinit(g_mp3_decoder);
+}
+
+
+void play_mp3_start_pipeline(int fileid)
+{
+    audio_pipeline_stop(g_pipeline);
+    audio_pipeline_wait_for_stop(g_pipeline);
+    audio_pipeline_terminate(g_pipeline);
+    audio_pipeline_reset_ringbuffer(g_pipeline);
+    audio_pipeline_reset_elements(g_pipeline);
+    audio_pipeline_change_state(g_pipeline, AEL_STATE_INIT);
+    set_next_file_marker(fileid);
+    audio_pipeline_run(g_pipeline);
+}
+
+#if 0
 void play_mp3_init_and_run(void)
 {
     audio_pipeline_handle_t pipeline;
@@ -166,7 +232,7 @@ void play_mp3_init_and_run(void)
     audio_pipeline_deinit(pipeline);
     audio_element_deinit(mp3_decoder);
 }
-
+#endif
 
 int play_mp3_read_buffer(char *buff, int buff_size)
 {

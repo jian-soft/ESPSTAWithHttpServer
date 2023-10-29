@@ -7,10 +7,9 @@ extern "C" {
 #endif
 
 void sound_init(void);
-void sound_play_didi(void);
-void sound_play_gun(void);
 void sound_play_freq(float freq);
-void sound_play_mp3();
+
+void sound_play_mp3(int fileid);
 
 
 #ifdef __cplusplus

@@ -25,13 +25,8 @@ static const char err_reason[][30] = {"input param is invalid",
 
 
 static i2s_chan_handle_t                tx_chan;        // I2S tx channel handler
-extern const uint8_t gun_pcm_start[] asm("_binary_gun_s8_16k_mono_pcm_start");
-extern const uint8_t gun_pcm_end[]   asm("_binary_gun_s8_16k_mono_pcm_end");
-extern const uint8_t didi_pcm_start[] asm("_binary_didi_s8_16k_mono_pcm_start");
-extern const uint8_t didi_pcm_end[]   asm("_binary_didi_s8_16k_mono_pcm_end");
 
 SemaphoreHandle_t g_i2s_mutex = NULL;
-
 #define MY_SR 16000.0
 
 float inv_sr;
@@ -108,7 +103,6 @@ static void i2s_task_play_freq(void *args)
 static void i2s_task_play_mp3(void *args)
 {
     static char raw_buffer[1024];
-    int read_len;
 
     esp_err_t ret = ESP_OK;
     ret = xSemaphoreTake(g_i2s_mutex, 0);
@@ -117,10 +111,14 @@ static void i2s_task_play_mp3(void *args)
         return;
     }
 
-    size_t bytes_write = 0, total_write = 0;
+    int fileid = (int)args;
+    printf("dddd, fileid:%d\n", fileid);
+    play_mp3_start_pipeline(fileid);
 
     ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
 
+    int read_len;
+    size_t bytes_write = 0, total_write = 0;
     while(1) {
         read_len = play_mp3_read_buffer(raw_buffer, sizeof(raw_buffer));
         if (read_len <= 0) {
@@ -148,74 +146,6 @@ static void i2s_task_play_mp3(void *args)
     vTaskDelete(NULL);
 
 }
-
-
-static void i2s_write_task_16(void *args)
-{
-    esp_err_t ret = ESP_OK;
-
-    ret = xSemaphoreTake(g_i2s_mutex, 0);
-    if (pdTRUE != ret) {
-        vTaskDelete(NULL);
-        return;
-    }
-
-    size_t bytes_write = 0;
-
-    const int8_t *music_start = (int8_t *)args;
-    size_t size;
-    if (args == (void *)didi_pcm_start) {
-        size = didi_pcm_end - didi_pcm_start;
-    } else {
-        size = gun_pcm_end - gun_pcm_start;
-    }
-
-    ESP_LOGI(TAG, "the music size: %d", size);
-
-    //size_t i;
-    //int16_t le_data[4];
-
-    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
-    ret = i2s_channel_write(tx_chan, music_start, size, &bytes_write, portMAX_DELAY);
-    if (ret != ESP_OK) {
-       ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
-       abort();
-    }
-    if (bytes_write > 0) {
-       ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
-    } else {
-       ESP_LOGE(TAG, "[music] i2s music play failed.");
-       abort();
-    }
-
-/*
-    for (i = 0; i < size; i += 4) {
-        le_data[0] = (music_start[i] << 8)/VOLUME_SCALE;
-        le_data[1] = (music_start[i + 1] << 8)/VOLUME_SCALE;
-        le_data[2] = (music_start[i + 2] << 8)/VOLUME_SCALE;
-        le_data[3] = (music_start[i + 3] << 8)/VOLUME_SCALE;
-
-        ret = i2s_channel_write(tx_chan, le_data, 8, &bytes_write, portMAX_DELAY);
-        if (ret != ESP_OK) {
-           ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
-           abort();
-        }
-        if (bytes_write > 0) {
-           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
-           total_write += bytes_write;
-        } else {
-           ESP_LOGE(TAG, "[music] i2s music play falied.");
-           abort();
-        }
-    }
-
-    ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
-*/
-    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
-    xSemaphoreGive(g_i2s_mutex);
-    vTaskDelete(NULL);
-}
-
 
 static void i2s_example_init_std_simplex(void)
 {
@@ -261,16 +191,6 @@ void sound_init()
     }
 }
 
-void sound_play_didi()
-{
-    xTaskCreate(i2s_write_task_16, "play_didi_task", 4096, (void *)didi_pcm_start, 5, NULL);
-}
-
-void sound_play_gun()
-{
-    xTaskCreate(i2s_write_task_16, "play_gun_task", 4096, (void *)gun_pcm_start, 5, NULL);
-}
-
 void sound_play_freq(float freq)
 {
     static float t;
@@ -279,8 +199,8 @@ void sound_play_freq(float freq)
 }
 
 
-void sound_play_mp3()
+void sound_play_mp3(int fileid)
 {
-    xTaskCreate(i2s_task_play_mp3, "play_mp3_task", 4096, NULL, 5, NULL);
+    xTaskCreate(i2s_task_play_mp3, "play_mp3_task", 4096, (void *)fileid, 5, NULL);
 }
 

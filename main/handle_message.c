@@ -53,15 +53,11 @@ int handle_message(char *json_str_in, char *json_str_out)
         ESP_LOGI(TAG, "M_RUN: m1distance:%d, m2distance:%d TBD", d1->valueint, d2->valueint);
     }
     else if (0 == strcmp(type_string, "S_PLAY")) {
-        cJSON *file = cJSON_GetObjectItem(root, "file");
+        cJSON *file = cJSON_GetObjectItem(root, "fileid");
         if (NULL == file)
             goto out;
 
-        if (0 == strcmp("didi", file->valuestring)) {
-            sound_play_didi();
-        } else if (0 == strcmp("gun", file->valuestring)) {
-            sound_play_gun();
-        }
+        sound_play_mp3(file->valueint);
     }
     else if (0 == strcmp(type_string, "S_FREQ")) {
         cJSON *value = cJSON_GetObjectItem(root, "value");

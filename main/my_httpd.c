@@ -303,9 +303,9 @@ static esp_err_t echo_post_handler(httpd_req_t *req)
             cJSON *item = cJSON_GetObjectItem(root, "value");
             ESP_LOGI(TAG, "btn: value:%d", item->valueint);
             if (item->valueint == 1) {
-                sound_play_gun();
+                sound_play_mp3(1);
             } else if (item->valueint == 2) {
-                sound_play_didi();
+                sound_play_mp3(0);
             }
         }
         else if (0 == strcmp(type_string, "pitch")) {

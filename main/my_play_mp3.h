@@ -6,8 +6,10 @@
 extern "C" {
 #endif
 
-void play_mp3_init_and_run(void);
+
 int play_mp3_read_buffer(char *buff, int buff_size);
+    void play_mp3_start_pipeline(int fileid);
+    void play_mp3_init(void);
 
 
 #ifdef __cplusplus

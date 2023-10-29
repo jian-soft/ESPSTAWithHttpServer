@@ -86,6 +86,6 @@ void app_main(void)
     //    ESP_LOGI(TAG, "m1s:%d, m2s:%d\n", get_m1_cnt(), get_m2_cnt());
     //}
 
-    play_mp3_init_and_run();
+    play_mp3_init();
 
 }
