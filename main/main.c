@@ -73,11 +73,8 @@ void app_main(void)
     sound_init();
 
     led_strip_init();
-    led_on();
     adc_init();
 
-
-    //led_chase();
 //    int cnt = 0;
 
     //adc_test();
@@ -88,4 +85,5 @@ void app_main(void)
 
     play_mp3_init();
 
+    //led_chase();
 }
