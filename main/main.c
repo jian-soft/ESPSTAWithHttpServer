@@ -25,8 +25,9 @@
 #include "led_strip.h"
 #include "my_adc.h"
 #include "my_play_mp3.h"
+#include "audio_convert.h"
 
-static const char *TAG = "fs";
+static const char *TAG = "main";
 
 
 esp_err_t init_fs(void)
@@ -71,8 +72,10 @@ void app_main(void)
     init_fs();
 
     sound_init();
+    play_mp3_init();
+    audio_convert_init();  //audio conver task run
 
-    led_strip_init();
+    led_strip_init();  //led strip render task run
     adc_init();
 
 //    int cnt = 0;
@@ -83,7 +86,7 @@ void app_main(void)
     //    ESP_LOGI(TAG, "m1s:%d, m2s:%d\n", get_m1_cnt(), get_m2_cnt());
     //}
 
-    play_mp3_init();
+
 
     //led_chase();
 }

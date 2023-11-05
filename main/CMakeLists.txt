@@ -12,6 +12,7 @@ idf_component_register(
 		"my_udp.c"
 		"handle_message.c"
 		"my_play_mp3.c"
+		"audio_convert.c"
 	INCLUDE_DIRS "."
 	EMBED_FILES
 		"mmfile/didi_1c_16khz.mp3"

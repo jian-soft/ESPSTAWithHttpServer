@@ -21,7 +21,6 @@
 #include "audio_common.h"
 #include "raw_stream.h"
 #include "mp3_decoder.h"
-#include "sound.h"
 
 static const char *TAG = "PLAY_MP3";
 static audio_pipeline_handle_t g_pipeline;

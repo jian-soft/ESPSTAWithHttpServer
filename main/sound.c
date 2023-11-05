@@ -9,22 +9,34 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/event_groups.h"
 #include "driver/i2s_std.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "io_assignment.h"
 #include <math.h>
 #include "my_play_mp3.h"
-
-#define VOLUME_SCALE                1
+#include "sound.h"
 
 static const char *TAG = "i2s";
 static const char err_reason[][30] = {"input param is invalid",
                                       "operation timeout"
                                      };
 
-
+static data_listen_cb g_data_listen_cb;
 static i2s_chan_handle_t                tx_chan;        // I2S tx channel handler
+
+typedef struct {
+    /* Task related */
+    volatile bool                    task_run;             /*!< Component running status */
+    EventGroupHandle_t               state_event;          /*!< Task's state event group */
+    int                              fileid;
+} sound_play_mp3_handle_t;
+
+static sound_play_mp3_handle_t g_playmp3_handle;
+const static int SOUND_PLAYMP3_STOPPED_BIT = BIT0;
+
+
 
 SemaphoreHandle_t g_i2s_mutex = NULL;
 #define MY_SR 16000.0
@@ -99,54 +111,6 @@ static void i2s_task_play_freq(void *args)
 
 }
 
-
-static void i2s_task_play_mp3(void *args)
-{
-    static char raw_buffer[1024];
-
-    esp_err_t ret = ESP_OK;
-    ret = xSemaphoreTake(g_i2s_mutex, 0);
-    if (pdTRUE != ret) {
-        vTaskDelete(NULL);
-        return;
-    }
-
-    int fileid = (int)args;
-    printf("dddd, fileid:%d\n", fileid);
-    play_mp3_start_pipeline(fileid);
-
-    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
-
-    int read_len;
-    size_t bytes_write = 0, total_write = 0;
-    while(1) {
-        read_len = play_mp3_read_buffer(raw_buffer, sizeof(raw_buffer));
-        if (read_len <= 0) {
-            break;
-        }
-
-        ret = i2s_channel_write(tx_chan, raw_buffer, read_len, &bytes_write, portMAX_DELAY);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
-            abort();
-        }
-        if (bytes_write > 0) {
-           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
-           total_write += bytes_write;
-        } else {
-           ESP_LOGE(TAG, "[music] i2s music play falied.");
-           abort();
-        }
-    }
-
-    ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
-
-    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
-    xSemaphoreGive(g_i2s_mutex);
-    vTaskDelete(NULL);
-
-}
-
 static void i2s_example_init_std_simplex(void)
 {
     /* Setp 1: Determine the I2S channel configuration and allocate two channels one by one
@@ -189,6 +153,9 @@ void sound_init()
         ESP_LOGE(TAG, "create g_i2s_mutex fail");
         abort();
     }
+
+    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
+    handle->state_event = xEventGroupCreate();
 }
 
 void sound_play_freq(float freq)
@@ -198,9 +165,99 @@ void sound_play_freq(float freq)
     xTaskCreate(i2s_task_play_freq, "play_freq_task", 4096, (void *)(&t), 5, NULL);
 }
 
+static void i2s_task_play_mp3(void *args)
+{
+    static char raw_buffer[1024];
+    sound_play_mp3_handle_t *handle = (sound_play_mp3_handle_t *)args;
+
+    esp_err_t ret = ESP_OK;
+    ret = xSemaphoreTake(g_i2s_mutex, 0);
+    if (pdTRUE != ret) {
+        handle->task_run = false;
+        goto out;
+    }
+
+    play_mp3_start_pipeline(handle->fileid);
+
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
+
+    int read_len;
+    size_t bytes_write = 0, total_write = 0;
+    while(handle->task_run) {
+        read_len = play_mp3_read_buffer(raw_buffer, sizeof(raw_buffer));
+        if (read_len <= 0) {
+            break;
+        }
+
+        if (g_data_listen_cb) {
+            g_data_listen_cb(raw_buffer, read_len);
+        }
+
+        ret = i2s_channel_write(tx_chan, raw_buffer, read_len, &bytes_write, portMAX_DELAY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
+            abort();
+        }
+        if (bytes_write > 0) {
+           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
+           total_write += bytes_write;
+        } else {
+           ESP_LOGE(TAG, "[music] i2s music play falied.");
+           abort();
+        }
+    }
+    handle->task_run = false;
+    ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
+
+    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
+    xSemaphoreGive(g_i2s_mutex);
+
+out:
+    xEventGroupSetBits(handle->state_event, SOUND_PLAYMP3_STOPPED_BIT);
+    vTaskDelete(NULL);
+}
+
+esp_err_t sound_play_mp3_wait_for_stop(sound_play_mp3_handle_t *handle)
+{
+    EventBits_t uxBits = xEventGroupWaitBits(handle->state_event, SOUND_PLAYMP3_STOPPED_BIT, true, true, 500 / portTICK_RATE_MS);
+    esp_err_t ret = ESP_ERR_TIMEOUT;
+    if (uxBits & SOUND_PLAYMP3_STOPPED_BIT) {
+        ret = ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "wait for play-mp3 stop timeout.");
+    }
+    return ret;
+}
+
+esp_err_t sound_play_mp3_stop(void)
+{
+    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
+    if (false == handle->task_run) {
+        return ESP_OK;
+    }
+
+    xEventGroupClearBits(handle->state_event, SOUND_PLAYMP3_STOPPED_BIT);
+    handle->task_run = false;
+    esp_err_t ret = sound_play_mp3_wait_for_stop(handle);
+
+    return ret;
+}
 
 void sound_play_mp3(int fileid)
 {
-    xTaskCreate(i2s_task_play_mp3, "play_mp3_task", 4096, (void *)fileid, 5, NULL);
+    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
+    if (true == handle->task_run) {
+        sound_play_mp3_stop();
+    }
+
+    handle->task_run = true;
+    handle->fileid = fileid;
+    xTaskCreate(i2s_task_play_mp3, "play_mp3_task", 4096, handle, 5, NULL);
+}
+
+
+void sound_register_data_listen_cb(data_listen_cb cb)
+{
+    g_data_listen_cb = cb;
 }
 
