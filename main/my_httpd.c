@@ -317,7 +317,7 @@ static esp_err_t echo_post_handler(httpd_req_t *req)
             ESP_LOGI(TAG, "pitch: value:%d", pitch);
 
             float p2f[] = {261.626, 293.665, 329.628, 349.228, 391.995, 440.000, 493.883, 523.251};
-            sound_play_freq(p2f[pitch]);
+            //sound_play_freq(p2f[pitch]);
         }
         break;
     }

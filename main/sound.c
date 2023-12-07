@@ -39,76 +39,168 @@ const static int SOUND_PLAYMP3_STOPPED_BIT = BIT0;
 
 
 SemaphoreHandle_t g_i2s_mutex = NULL;
+
+#define BEAT_DURATION 0.6  //一拍的时长，单位秒
+
 #define MY_SR 16000.0
 
-float inv_sr;
-float inv_freq;
-float half_inv_freq;
+
+// Linear interpolation
+float lerp(float x, float x1, float x2, float y1, float y2) {
+    return y1 + (x-x1) * (y2-y1) / (x2-x1) ;
+}
+
+
+/*
+    @sample: 原始值
+    @t: 相对于节拍开始时间计算出的偏移时间
+    @duration: 节拍时长，单拍时长*拍数，单节拍时长要大于0.3s
+    @return: adsr之后的值
+*/
+float adsr(float sample, float t, float duration)
+{
+    float attackTime = 0.01;
+    float decayTime = 0.1;
+    float sustainGain = 0.8;
+    float releaseTime = 0.1;
+
+    if (t < attackTime) {
+        sample *= lerp(t, 0, attackTime, 0, 1);
+    }
+    else if (t < attackTime + decayTime) {
+        sample *= lerp(t, attackTime, attackTime + decayTime, 1, sustainGain);
+    }
+    else if (t < duration - releaseTime) {
+        sample *= sustainGain;
+    }
+    else {
+        sample *= lerp(t, duration - releaseTime, duration, sustainGain, 0);
+    }
+    return sample;
+}
+
+
+
+
+float g_sample_rate;
+float g_freq;
+float g_inv_freq;
+int tick_idx;
+float g_duration;
+
 static void square_init(float freq)
 {
-    inv_sr = 1.0/MY_SR;
-    inv_freq = 1.0 / (float)freq;
-    half_inv_freq = 0.5 / (float)freq;
+    g_sample_rate = MY_SR;
+    g_freq = freq;
+    g_inv_freq = 1.0 / freq;
 }
 static int16_t square_tick(int idx)
 {
     float mod;
-    mod = fmod((float)idx * inv_sr, inv_freq);
 
-    if (mod >= half_inv_freq) {
+    mod = fmod((float)idx / g_sample_rate, g_inv_freq);
+
+    if (mod >= (g_inv_freq/2.0)) {
         return 5000;
     } else {
         return -5000;
     }
 }
-#define BUFF_SIZE 512
-int16_t buffer[BUFF_SIZE];
+
+static void saw_reset(float freq, float beat_cnt)
+{
+    g_sample_rate = MY_SR;
+    g_freq = freq;
+    g_inv_freq = 1.0 / freq;
+    tick_idx = 0;
+    g_duration = beat_cnt * BEAT_DURATION;
+}
+/*
+    @tick_out: the output value
+    @return: 1-return normal, 0-duration end
+*/
+static inline int saw_tick(int16_t *tick_out)
+{
+    float t = (float)tick_idx/g_sample_rate;
+    if (t >= g_duration) {
+        return 0;
+    }
+
+    float mod = fmod(t + g_inv_freq/2.0, g_inv_freq);
+    float out = 2.0 * g_freq * mod - 1.0;
+    out = adsr(out, t, g_duration);
+    *tick_out = (int16_t)(5000 * out);
+
+    tick_idx++;
+    return 1;
+}
+
+
+#define BUFF_SIZE 800
+int16_t g_i2s_data_buffer[BUFF_SIZE];
 static void i2s_task_play_freq(void *args)
 {
-    float freq = *((float *)args);
-    if (0 == freq) {
-        vTaskDelete(NULL);
-        return;
-    }
+    cJSON *root = (cJSON *)args;
 
     esp_err_t ret = ESP_OK;
     ret = xSemaphoreTake(g_i2s_mutex, 0);
     if (pdTRUE != ret) {
         vTaskDelete(NULL);
+        cJSON_Delete(root);
         return;
     }
 
     size_t bytes_write = 0, total_write = 0;
-    ESP_LOGI(TAG, "i2s_task_play_freq: freq:%f", freq);
-    square_init(freq);
+    cJSON *notes = cJSON_GetObjectItem(root, "notes");
+    cJSON *item, *ifreq, *ibeat;
+    float freq, beat;
+    int bf_size, tick_ret;
 
     ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
-    for (int j = 0; j < 16; j++) {
-        for (int i = 0; i < BUFF_SIZE; i ++) {
-            if (j==13 || j == 14 || j == 15) buffer[i] = 0;
-            else buffer[i] = square_tick(i + j*BUFF_SIZE);
 
+    cJSON_ArrayForEach(item, notes) {
+        ifreq = cJSON_GetObjectItem(item, "freq");
+        ibeat = cJSON_GetObjectItem(item, "beat");
+        if (NULL == ifreq || NULL == ibeat) {
+            break;
         }
-        ret = i2s_channel_write(tx_chan, buffer, BUFF_SIZE*2, &bytes_write, portMAX_DELAY);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
-            abort();
-        }
-        if (bytes_write > 0) {
-           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
-           total_write += bytes_write;
-        } else {
-           ESP_LOGE(TAG, "[music] i2s music play falied.");
-           abort();
+        freq = (float)ifreq->valuedouble;
+        beat = (float)ibeat->valuedouble;
+        printf("dddd, freq: %f, beat: %f\n", freq, beat);
+
+        tick_ret = 1;
+        saw_reset(freq, beat);
+        while (tick_ret) {
+            for (bf_size = 0; bf_size < BUFF_SIZE; bf_size++) {
+                tick_ret = saw_tick(g_i2s_data_buffer + bf_size);
+                if (0 == tick_ret) {
+                    break;
+                }
+            }
+
+            if (0 == bf_size) {
+                break;
+            }
+
+            ret = i2s_channel_write(tx_chan, g_i2s_data_buffer, bf_size*2, &bytes_write, portMAX_DELAY);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
+                abort();
+            }
+            if (bytes_write > 0) {
+               total_write += bytes_write;
+            } else {
+               ESP_LOGE(TAG, "[music] i2s music play failed.");
+               abort();
+            }
         }
     }
 
     ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
-
     ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
     xSemaphoreGive(g_i2s_mutex);
+    cJSON_Delete(root);
     vTaskDelete(NULL);
-
 }
 
 static void i2s_example_init_std_simplex(void)
@@ -158,16 +250,16 @@ void sound_init()
     handle->state_event = xEventGroupCreate();
 }
 
-void sound_play_freq(float freq)
+/* @root: {type: S_NOTES, notes:[]}, should call cJSON_Delete(root) to free memory */
+void sound_play_freq(cJSON *root)
 {
-    static float t;
-    t = freq;
-    xTaskCreate(i2s_task_play_freq, "play_freq_task", 4096, (void *)(&t), 5, NULL);
+    xTaskCreate(i2s_task_play_freq, "play_freq_task", 4096, root, 5, NULL);
 }
 
 static void i2s_task_play_mp3(void *args)
 {
-    static char raw_buffer[1024];
+#define READ_LEN 1024
+    char *raw_buffer = (char *)g_i2s_data_buffer;
     sound_play_mp3_handle_t *handle = (sound_play_mp3_handle_t *)args;
 
     esp_err_t ret = ESP_OK;
@@ -184,7 +276,7 @@ static void i2s_task_play_mp3(void *args)
     int read_len;
     size_t bytes_write = 0, total_write = 0;
     while(handle->task_run) {
-        read_len = play_mp3_read_buffer(raw_buffer, sizeof(raw_buffer));
+        read_len = play_mp3_read_buffer(raw_buffer, READ_LEN);
         if (read_len <= 0) {
             break;
         }

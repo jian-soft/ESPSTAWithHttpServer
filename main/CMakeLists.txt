@@ -13,7 +13,11 @@ idf_component_register(
 		"handle_message.c"
 		"my_play_mp3.c"
 		"audio_convert.c"
+		"cnv_lib/cnv_audio/cnv_audio.c"
+		"esp_color.c"
 	INCLUDE_DIRS "."
+		"cnv_lib/cnv_audio"
+		"cnv_lib/cnv_basic"
 	EMBED_FILES
 		"mmfile/didi_1c_16khz.mp3"
 		"mmfile/gun_1c_16khz.mp3"
@@ -29,3 +33,7 @@ if(EXISTS ${WEB_SRC_DIR}/dist)
 else()
 	message(FATAL_ERROR "${WEB_SRC_DIR}/dist doesn't exit. Please run 'npm run build' in ${WEB_SRC_DIR}")
 endif()
+
+add_prebuilt_library(convert "${CMAKE_CURRENT_SOURCE_DIR}/cnv_lib/lib/${CONFIG_IDF_TARGET}/libconvert.a")
+
+target_link_libraries(${COMPONENT_TARGET} INTERFACE convert)

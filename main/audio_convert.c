@@ -10,6 +10,8 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 #include "sound.h"
+#include "cnv_audio.h"
+#include "led_strip.h"
 #include "audio_convert.h"
 
 static const char *TAG = "CNV";
@@ -29,15 +31,118 @@ typedef struct {
 
 static audio_convert_handle_t g_cnv_handler;
 
+cnv_audio_t g_cnv_audio;
+
+
+void volume_to_lightness(uint8_t volume, led_renderer_data_t *pleddata)
+{
+    uint8_t light;
+    light = (volume * 255)/100;
+    for (int i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
+        pleddata->pixels[i * 3 + 0] = light;
+        pleddata->pixels[i * 3 + 1] = light;
+        pleddata->pixels[i * 3 + 2] = light;
+    }
+}
+
+/* @source_data: 16bit value, @data_len: len of 16bit value */
+void cnv_pattern_energy_mode(void *source_data, int data_len)
+{
+    static uint16_t level, level_pre, x_forward, x_reverse;
+    cnv_audio_t *audio = &g_cnv_audio;
+    uint8_t volume = 0;
+    led_renderer_data_t leddata = {0};
+    uint8_t red, green, blue;
+    uint8_t coordx;
+
+    if (!(x_forward | x_reverse)) {
+        x_reverse = (EXAMPLE_LED_NUMBERS) >> 1; //2
+        if ((EXAMPLE_LED_NUMBERS) % 2) {
+            x_forward = x_reverse + 1;
+        } else {
+            x_forward = x_reverse; //2
+        }
+    }
+
+    cnv_audio_process(audio, source_data, NULL, data_len, CNV_AUDIO_VOLUME);
+    cnv_audio_get_volume(audio, &volume);
+    level = volume * (EXAMPLE_LED_NUMBERS) / 100 / 2;  //0 1 2
+    printf("dddd, level:%d\n", level);
+
+    if (level > level_pre) {
+        level_pre = level;
+        for (int x = 0; x < level; x ++) {
+            red = CNV_PATTERN_RED_BASE_VALUE - CNV_PATTERN_COLOR_SPAN * x;
+            green = 0;
+            blue = CNV_PATTERN_GREEN_BASE_VALUE + CNV_PATTERN_COLOR_SPAN * x;
+            coordx = x_forward + x;
+            leddata.pixels[coordx*3] = red;
+            leddata.pixels[coordx*3 + 1] = green;
+            leddata.pixels[coordx*3 + 2] = blue;
+
+            coordx = x_forward - x;
+            leddata.pixels[coordx*3] = red;
+            leddata.pixels[coordx*3 + 1] = green;
+            leddata.pixels[coordx*3 + 2] = blue;
+        }
+    } else {
+        if (level_pre != 0) {
+            for (int i = 0; i < 2; i ++) {
+                coordx = x_forward + (level_pre);
+                leddata.pixels[coordx*3] = 0;
+                leddata.pixels[coordx*3 + 1] = 0;
+                leddata.pixels[coordx*3 + 2] = 0;
+
+                coordx = x_reverse - (level_pre);
+                leddata.pixels[coordx*3] = 0;
+                leddata.pixels[coordx*3 + 1] = 0;
+                leddata.pixels[coordx*3 + 2] = 0;
+            }
+            level_pre--;
+        }
+    }
+
+    led_strip_fill_data(&leddata);
+}
+
+
+void cnv_pattern_myenergy_mode(void *source_data, int data_len)
+{
+    static uint16_t level; //level_pre, x_forward, x_reverse;
+    cnv_audio_t *audio = &g_cnv_audio;
+    uint8_t volume = 0;
+    led_renderer_data_t leddata = {0};
+    uint8_t red, green, blue;
+
+    cnv_audio_process(audio, source_data, NULL, data_len, CNV_AUDIO_VOLUME);
+    cnv_audio_get_volume(audio, &volume);
+    level = volume * (EXAMPLE_LED_NUMBERS) / 100;  //0 1 2 3 4
+    printf("dddd, level:%d\n", level);
+
+    for (int x = 0; x < level; x ++) {
+        red = CNV_PATTERN_RED_BASE_VALUE - CNV_PATTERN_COLOR_SPAN * x;
+        green = 0;
+        blue = CNV_PATTERN_GREEN_BASE_VALUE + CNV_PATTERN_COLOR_SPAN * x;
+
+        leddata.pixels[x*3] = red;
+        leddata.pixels[x*3 + 1] = green;
+        leddata.pixels[x*3 + 2] = blue;
+    }
+
+    led_strip_fill_data(&leddata);
+}
+
+
 static void audio_convert_task(void *args)
 {
     audio_convert_handle_t *handle = (audio_convert_handle_t *)args;
     audio_sample_data_t sample;
 
     while (handle->task_run) {
-        if (xQueueReceive(handle->in_queue, &sample, 10000 / portTICK_PERIOD_MS) == pdTRUE) {
-            //convert data
-            printf("dddd, convert task get data: %d\n", sample.len);
+        if (xQueueReceive(handle->in_queue, &sample, portMAX_DELAY) == pdTRUE) {
+
+            cnv_pattern_myenergy_mode(sample.data, sample.len);
+
         }
     }
     xEventGroupSetBits(handle->state_event, AUDIO_CONVERT_STOPPED_BIT);
@@ -111,8 +216,25 @@ void audio_convert_mp3_data_cb(void *data, int size)
 
 void audio_convert_init()
 {
-    audio_convert_handle_t *handle = &g_cnv_handler;
+    cnv_audio_t *audio = &g_cnv_audio;
+    audio->cur_rms = 0;
+    audio->variable_rms_max = 64;
+    audio->default_rms_max = 64;
+    audio->default_rms_min = 12;
+    audio->window_max_width_db = 24;
+    audio->regress_threshold_vol = 30;
+    audio->samplerate = 16000;
+    audio->n_samples = 256;
+#if 0
+    audio->vol_calc_types = CNV_AUDIO_VOLUME_STATIC;
+#else
+    audio->vol_calc_types = CNV_AUDIO_VOLUME_DYNAMIC;
+    audio->max_rms_fall_back_cycle = 3;
+#endif
+    cnv_audio_set_resolution_bits(audio, 12);
 
+
+    audio_convert_handle_t *handle = &g_cnv_handler;
     handle->state_event = xEventGroupCreate();
     handle->in_queue = xQueueCreate(3, sizeof(audio_sample_data_t));
     if (NULL == handle->in_queue) {

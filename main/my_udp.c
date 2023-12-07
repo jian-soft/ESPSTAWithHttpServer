@@ -21,7 +21,7 @@ static void udp_server_task(void *pvParameters)
     int addr_family = (int)pvParameters;
     int ip_protocol = 0;
     struct sockaddr_in6 dest_addr;
-    char rx_buffer[128];
+    char rx_buffer[512];
     char addr_str[128];
 
     if (addr_family == AF_INET) {
@@ -64,7 +64,7 @@ static void udp_server_task(void *pvParameters)
                 }
 
                 rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
-                //ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
+                ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
                 ESP_LOGI(TAG, "RECV: %s", rx_buffer);
 
                 handle_message(rx_buffer, NULL);

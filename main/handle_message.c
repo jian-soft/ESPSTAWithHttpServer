@@ -1,9 +1,11 @@
 #include <string.h>
+#include <stdio.h>
 #include "esp_log.h"
 #include "cJSON.h"
 #include "my_gpio.h"
 #include "sound.h"
 #include "drv8833_pwm.h"
+#include "handle_message.h"
 
 
 static const char *TAG = "handle";
@@ -25,7 +27,7 @@ int handle_message(char *json_str_in, char *json_str_out)
         goto out;
     }
     char *type_string = cJSON_GetStringValue(type);
-    if (0 == strcmp(type_string, "M_RUN")) {
+    if (0 == strcmp(type_string, M_RUN)) {
         cJSON *d1 = cJSON_GetObjectItem(root, "m1d");
         cJSON *d2 = cJSON_GetObjectItem(root, "m2d");
         cJSON *s1 = cJSON_GetObjectItem(root, "m1s");
@@ -41,10 +43,10 @@ int handle_message(char *json_str_in, char *json_str_out)
         drv8833_motorA_run(s1->valueint, d1->valueint);
         drv8833_motorB_run(s2->valueint, d2->valueint);
     }
-    else if (0 == strcmp(type_string, "M_STOP")) {
+    else if (0 == strcmp(type_string, M_STOP)) {
         car_stop();
     }
-    else if (0 == strcmp(type_string, "M_RUN_D")) {
+    else if (0 == strcmp(type_string, M_RUN_D)) {
         cJSON *d1 = cJSON_GetObjectItem(root, "m1d");
         cJSON *d2 = cJSON_GetObjectItem(root, "m2d");
         if (NULL == d1 || NULL == d2) {
@@ -52,20 +54,30 @@ int handle_message(char *json_str_in, char *json_str_out)
         }
         ESP_LOGI(TAG, "M_RUN: m1distance:%d, m2distance:%d TBD", d1->valueint, d2->valueint);
     }
-    else if (0 == strcmp(type_string, "S_PLAY")) {
+    else if (0 == strcmp(type_string, S_PLAY)) {
         cJSON *file = cJSON_GetObjectItem(root, "fileid");
         if (NULL == file)
             goto out;
 
         sound_play_mp3(file->valueint);
     }
-    else if (0 == strcmp(type_string, "S_FREQ")) {
+    else if (0 == strcmp(type_string, S_FREQ)) {
         cJSON *value = cJSON_GetObjectItem(root, "value");
         if (NULL == value)
             goto out;
         float freq = (float)value->valuedouble;
         ESP_LOGI(TAG, "S_FREQ: freq:%f", freq);
-        sound_play_freq(freq);
+        //sound_play_freq(freq);
+    }
+    else if (0 == strcmp(type_string, S_NOTES)) {
+        cJSON *notes = cJSON_GetObjectItem(root, "notes");
+        if (NULL == notes)
+            goto out;
+        if (!cJSON_IsArray(notes))
+            goto out;
+
+        sound_play_freq(root);
+        root = NULL;
     }
 
 out:
