@@ -1,10 +1,25 @@
+#include <string.h>
+#include <stdio.h>
 #include <esp_log.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "freertos/event_groups.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "cJSON.h"
 #include "my_gpio.h"
 #include "io_assignment.h"
 
-//static const char *TAG = "pwm";
+static const char *TAG = "pwm";
+
+typedef struct {
+    /* Task related */
+    volatile bool                    task_run;             /*!< Component running status */
+    EventGroupHandle_t               state_event;          /*!< Task's state event group */
+    void                            *args;
+} motor_cmds_handle_t;
+static motor_cmds_handle_t g_motor_cmds_handler;
 
 void pwm_init(void)
 {
@@ -62,6 +77,8 @@ void pwm_init(void)
     for (ch = 0; ch < PWM_CH_NUM; ch++) {
         ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel[ch]));
     }
+
+    g_motor_cmds_handler.state_event = xEventGroupCreate();
 }
 
 
@@ -139,5 +156,108 @@ void car_stop(void)
     drv8833_motorB_stop();
     gpio_disable_drv8833();
 }
+
+
+esp_err_t motor_run_one_cmd(char *cmd)
+{
+    if (0 == strcmp(cmd, "F")) {
+        car_forward(100, 100);
+    } else if (0 == strcmp(cmd, "B")) {
+        car_back(100, 100);
+    } else if (0 == strcmp(cmd, "L")) {
+        drv8833_motorA_run(100, -1);
+        drv8833_motorB_run(100, 1);
+    } else if (0 == strcmp(cmd, "R")) {
+        drv8833_motorA_run(100, 1);
+        drv8833_motorB_run(100, -1);
+    } else if (0 == strcmp(cmd, "FL")) {
+        car_forward(50, 100);
+    } else if (0 == strcmp(cmd, "FR")) {
+        car_forward(100, 50);
+    } else if (0 == strcmp(cmd, "BL")) {
+        car_back(50, 100);
+    } else if (0 == strcmp(cmd, "BR")) {
+        car_back(100, 50);
+    } else {
+        ESP_LOGW(TAG, "unknow motor cmd:%s, run forward", cmd);
+        car_forward(100, 100);
+    }
+    return ESP_OK;
+}
+
+/*-------------------------------------------------------------*/
+
+
+#define BEAT_DURATION 0.6  //一拍的时长，单位秒
+
+static void motor_run_cmds_task(void *args)
+{
+    motor_cmds_handle_t *handle = (motor_cmds_handle_t *)args;
+    cJSON *root = handle->args;
+    cJSON *cmds = cJSON_GetObjectItem(root, "cmds");
+    cJSON *item, *icode, *ibeat;
+    float delaytime;
+
+    cJSON_ArrayForEach(item, cmds) {
+        if (!handle->task_run) {
+            break;
+        }
+
+        icode = cJSON_GetObjectItem(item, "code");
+        ibeat = cJSON_GetObjectItem(item, "beat");
+        if (!cJSON_IsString(icode) || !cJSON_IsNumber(ibeat)) {
+            break;
+        }
+        motor_run_one_cmd(icode->valuestring);
+
+        delaytime = ibeat->valuedouble * BEAT_DURATION * 1000;
+        printf("dddd, beat:%f, delaytime:%f, toint:%d\n", ibeat->valuedouble, delaytime, (int)delaytime);
+        vTaskDelay(pdMS_TO_TICKS(delaytime));
+    }
+    car_stop();
+    handle->task_run = false;
+    cJSON_Delete(root);
+    xEventGroupSetBits(handle->state_event, BIT0);
+    vTaskDelete(NULL);
+}
+esp_err_t motor_run_cmds_wait_for_stop(void)
+{
+    EventBits_t uxBits = xEventGroupWaitBits(g_motor_cmds_handler.state_event, BIT0, true, true, 5000 / portTICK_RATE_MS);
+    esp_err_t ret = ESP_ERR_TIMEOUT;
+    if (uxBits & BIT0) {
+        ret = ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "wait for stop timeout.");
+    }
+    return ret;
+
+}
+esp_err_t motor_run_cmds_stop(void)
+{
+    motor_cmds_handle_t *handle = &g_motor_cmds_handler;
+    if (false == handle->task_run) {
+        return ESP_OK;
+    }
+
+    xEventGroupClearBits(handle->state_event, BIT0);
+    handle->task_run = false;
+    esp_err_t ret = motor_run_cmds_wait_for_stop();
+
+    return ret;
+
+}
+/* @root: {type: M_CMDS, cmds:[]}, should call cJSON_Delete(root) to free memory */
+void motor_run_cmds(cJSON *root)
+{
+    motor_cmds_handle_t *handle = &g_motor_cmds_handler;
+    if (true == handle->task_run) {
+        motor_run_cmds_stop();
+    }
+
+    handle->task_run = true;
+    handle->args = root;
+    xTaskCreate(motor_run_cmds_task, "led_run_cmds_task", 4096, handle, 5, NULL);
+}
+
 
 

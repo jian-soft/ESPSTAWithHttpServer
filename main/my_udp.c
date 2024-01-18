@@ -21,7 +21,7 @@ static void udp_server_task(void *pvParameters)
     int addr_family = (int)pvParameters;
     int ip_protocol = 0;
     struct sockaddr_in6 dest_addr;
-    char rx_buffer[512];
+    static char rx_buffer[1024];
     char addr_str[128];
 
     if (addr_family == AF_INET) {
@@ -69,11 +69,11 @@ static void udp_server_task(void *pvParameters)
 
                 handle_message(rx_buffer, NULL);
 
-                int err = sendto(sock, rx_buffer, len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-                if (err < 0) {
-                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                    break;
-                }
+                //int err = sendto(sock, rx_buffer, len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
+                //if (err < 0) {
+                //    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+                //    break;
+                //}
             }
         }
         if (sock != -1) {

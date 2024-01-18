@@ -5,6 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "cJSON.h"
 
 void pwm_init(void);
 
@@ -17,6 +18,7 @@ void drv8833_motorB_stop(void);
 void drv8833_motorA_run(int speed, int direction);
 void drv8833_motorB_run(int speed, int direction);
 
+void motor_run_cmds(cJSON *root);
 
 
 #ifdef __cplusplus
