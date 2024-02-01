@@ -26,6 +26,7 @@
 #include "my_adc.h"
 #include "my_play_mp3.h"
 #include "audio_convert.h"
+#include "bt_gatts.h"
 
 static const char *TAG = "main";
 
@@ -64,8 +65,18 @@ esp_err_t init_fs(void)
 
 void app_main(void)
 {
+    //Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
     //wifi_init_softap();
     wifi_init_sta();
+
+    bt_gatts_init_and_run();
 
     pwm_init();
     gpio_init();

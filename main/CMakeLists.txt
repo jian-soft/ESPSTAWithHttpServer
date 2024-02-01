@@ -15,6 +15,7 @@ idf_component_register(
 		"audio_convert.c"
 		"cnv_lib/cnv_audio/cnv_audio.c"
 		"esp_color.c"
+		"bt_gatts.c"
 	INCLUDE_DIRS "."
 		"cnv_lib/cnv_audio"
 		"cnv_lib/cnv_basic"
