@@ -64,7 +64,7 @@ int handle_message(char *json_str_in, char *json_str_out)
         break;
         case M_CMDS: {
             cJSON *cmds = cJSON_GetObjectItem(root, "cmds");
-            if (!cJSON_IsArray(cmds))
+            if (!cJSON_IsString(cmds))
                 goto out;
 
             motor_run_cmds(root);
@@ -81,10 +81,10 @@ int handle_message(char *json_str_in, char *json_str_out)
         break;
         case S_NOTES: {
             cJSON *notes = cJSON_GetObjectItem(root, "notes");
-            if (!cJSON_IsArray(notes))
+            if (!cJSON_IsString(notes))
                 goto out;
 
-            sound_play_freq(root);
+            sound_play_notes(root);
             root = NULL;
         }
         break;

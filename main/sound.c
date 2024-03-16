@@ -15,6 +15,7 @@
 #include "esp_check.h"
 #include "io_assignment.h"
 #include <math.h>
+#include "utils.h"
 #include "my_play_mp3.h"
 #include "sound.h"
 
@@ -135,10 +136,38 @@ static inline int saw_tick(int16_t *tick_out)
     return 1;
 }
 
+const float g_note_normal[] = {261.626, 293.665, 329.628, 349.228, 391.995, 440.0, 493.883};
+const float g_note_high[] = {523.251, 587.33, 659.255, 698.456, 783.991, 880.0, 987.767};
+const float g_note_low[] = {130.813, 146.832, 164.814, 174.614, 195.998, 220.0, 246.942};
+
+static float note_to_freq(char *note)
+{
+    int idx;
+    float const *notes_table;
+
+    if (note[0] == '.') {
+        idx = note[1] - '1';
+        notes_table = g_note_low;
+    } else {
+        idx = note[0] - '1';
+        if (note[1] == '.') {
+            notes_table = g_note_high;
+        } else {
+            notes_table = g_note_normal;
+        }
+    }
+
+    if (idx >= 0 && idx < 7) {
+        return notes_table[idx];
+    }
+
+    return 261.626;
+}
+
 
 #define BUFF_SIZE 800
 int16_t g_i2s_data_buffer[BUFF_SIZE];
-static void i2s_task_play_freq(void *args)
+static void i2s_task_play_notes(void *args)
 {
     cJSON *root = (cJSON *)args;
 
@@ -151,25 +180,25 @@ static void i2s_task_play_freq(void *args)
     }
 
     size_t bytes_write = 0, total_write = 0;
-    cJSON *notes = cJSON_GetObjectItem(root, "notes");
-    cJSON *item, *ifreq, *ibeat;
-    float freq, beat;
     int bf_size, tick_ret;
+    cJSON *notesobj = cJSON_GetObjectItem(root, "notes");
+    char *notes = notesobj->valuestring;
+    char label[4];
+    int beatCnt;
+    int next_cmd_pos = 0;
+    float freq;
 
     ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
-
-    cJSON_ArrayForEach(item, notes) {
-        ifreq = cJSON_GetObjectItem(item, "freq");
-        ibeat = cJSON_GetObjectItem(item, "beat");
-        if (NULL == ifreq || NULL == ibeat) {
+    while(*notes) {
+        next_cmd_pos = parse_cmd(notes, label, &beatCnt);
+        if (next_cmd_pos < 0) {
             break;
         }
-        freq = (float)ifreq->valuedouble;
-        beat = (float)ibeat->valuedouble;
-        printf("dddd, freq: %f, beat: %f\n", freq, beat);
+        freq = note_to_freq(label);
+        printf("dddd, label: %s, beatCnt: %d, freq:%f\n", label, beatCnt, freq);
 
         tick_ret = 1;
-        saw_reset(freq, beat);
+        saw_reset(freq, beatCnt);
         while (tick_ret) {
             for (bf_size = 0; bf_size < BUFF_SIZE; bf_size++) {
                 tick_ret = saw_tick(g_i2s_data_buffer + bf_size);
@@ -194,7 +223,10 @@ static void i2s_task_play_freq(void *args)
                abort();
             }
         }
+
+        notes += next_cmd_pos + 1;
     }
+
 
     ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
     ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
@@ -251,9 +283,9 @@ void sound_init()
 }
 
 /* @root: {type: S_NOTES, notes:[]}, should call cJSON_Delete(root) to free memory */
-void sound_play_freq(cJSON *root)
+void sound_play_notes(cJSON *root)
 {
-    xTaskCreate(i2s_task_play_freq, "play_freq_task", 4096, root, 5, NULL);
+    xTaskCreate(i2s_task_play_notes, "play_notes_task", 4096, root, 5, NULL);
 }
 
 static void i2s_task_play_mp3(void *args)

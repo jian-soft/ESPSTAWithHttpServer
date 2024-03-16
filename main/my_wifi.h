@@ -8,6 +8,7 @@ extern "C" {
 
 void wifi_init_softap(void);
 void wifi_init_sta(void);
+void wifi_set_config_and_start(char *ssid, char *passwd);
 
 
 #ifdef __cplusplus

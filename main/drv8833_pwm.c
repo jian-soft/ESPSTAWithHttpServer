@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "cJSON.h"
+#include "utils.h"
 #include "my_gpio.h"
 #include "io_assignment.h"
 
@@ -194,26 +195,29 @@ static void motor_run_cmds_task(void *args)
 {
     motor_cmds_handle_t *handle = (motor_cmds_handle_t *)args;
     cJSON *root = handle->args;
-    cJSON *cmds = cJSON_GetObjectItem(root, "cmds");
-    cJSON *item, *icode, *ibeat;
+    cJSON *cmdsobj = cJSON_GetObjectItem(root, "cmds");
+    char *cmds = cmdsobj->valuestring;
+    char code[16];
+    int beatCnt;
+    int next_cmd_pos = 0;
     float delaytime;
 
-    cJSON_ArrayForEach(item, cmds) {
+    while(*cmds) {
         if (!handle->task_run) {
             break;
         }
-
-        icode = cJSON_GetObjectItem(item, "code");
-        ibeat = cJSON_GetObjectItem(item, "beat");
-        if (!cJSON_IsString(icode) || !cJSON_IsNumber(ibeat)) {
+        next_cmd_pos = parse_cmd(cmds, code, &beatCnt);
+        if (next_cmd_pos < 0) {
             break;
         }
-        motor_run_one_cmd(icode->valuestring);
 
-        delaytime = ibeat->valuedouble * BEAT_DURATION * 1000;
-        printf("dddd, beat:%f, delaytime:%f, toint:%d\n", ibeat->valuedouble, delaytime, (int)delaytime);
+        delaytime = beatCnt * BEAT_DURATION * 1000;
+        motor_run_one_cmd(code);
         vTaskDelay(pdMS_TO_TICKS(delaytime));
+
+        cmds += next_cmd_pos + 1;
     }
+
     car_stop();
     handle->task_run = false;
     cJSON_Delete(root);

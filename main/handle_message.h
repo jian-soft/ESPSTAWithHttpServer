@@ -36,10 +36,7 @@ enum message_type{
     /* 电机执行一段指令：
     {
         type: M_CMDS,
-        cmds: [
-            {code: "L", beat: 1},
-            {code: "R", beat: 4},
-        ]
+        cmds: "L,1;R,4;FL,1;BL,4;"
     }
     code定义，字符串：
     "F" "B": 前进 后退
@@ -70,7 +67,12 @@ enum message_type{
             {freq: 222.2, beat: 1},
             {freq: 410.1, beat: 4},
         ]
-    } */
+    }
+    {
+        type: S_NOTE,
+        notes: "1.,4;1,4;.1,4"
+    }
+    */
     S_NOTES,
 
     /* LED控制：L_CMDS
