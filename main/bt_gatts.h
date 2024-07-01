@@ -10,6 +10,7 @@ extern "C" {
 void bt_gatts_init_and_run(void);
 
 void car_set_wifi_config_status(int is_config);
+void bt_disable();
 
 
 

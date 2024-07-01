@@ -62,7 +62,7 @@ esp_err_t init_fs(void)
     return ESP_OK;
 }
 
-
+/* 创建线程参考led_run_cmds_task */
 void app_main(void)
 {
     //Initialize NVS

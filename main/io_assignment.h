@@ -9,10 +9,10 @@ extern "C" {
 
 
 //DRV8833
-#define DRV8833_AIN1_IO     GPIO_NUM_4
-#define DRV8833_AIN2_IO     GPIO_NUM_5
-#define DRV8833_BIN1_IO     GPIO_NUM_6
-#define DRV8833_BIN2_IO     GPIO_NUM_7
+#define DRV8833_AIN1_IO     GPIO_NUM_5
+#define DRV8833_AIN2_IO     GPIO_NUM_4
+#define DRV8833_BIN1_IO     GPIO_NUM_7
+#define DRV8833_BIN2_IO     GPIO_NUM_6
 
 //MAX98397
 #define STD_BCLK_IO        GPIO_NUM_9      // I2S bit clock io number

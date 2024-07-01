@@ -166,11 +166,13 @@ esp_err_t motor_run_one_cmd(char *cmd)
     } else if (0 == strcmp(cmd, "B")) {
         car_back(100, 100);
     } else if (0 == strcmp(cmd, "L")) {
-        drv8833_motorA_run(100, -1);
-        drv8833_motorB_run(100, 1);
+        gpio_enable_drv8833();
+        drv8833_motorA_run(75, -1);
+        drv8833_motorB_run(75, 1);
     } else if (0 == strcmp(cmd, "R")) {
-        drv8833_motorA_run(100, 1);
-        drv8833_motorB_run(100, -1);
+        gpio_enable_drv8833();
+        drv8833_motorA_run(75, 1);
+        drv8833_motorB_run(75, -1);
     } else if (0 == strcmp(cmd, "FL")) {
         car_forward(50, 100);
     } else if (0 == strcmp(cmd, "FR")) {
@@ -188,15 +190,10 @@ esp_err_t motor_run_one_cmd(char *cmd)
 
 /*-------------------------------------------------------------*/
 
-
-#define BEAT_DURATION 0.6  //一拍的时长，单位秒
-
 static void motor_run_cmds_task(void *args)
 {
     motor_cmds_handle_t *handle = (motor_cmds_handle_t *)args;
-    cJSON *root = handle->args;
-    cJSON *cmdsobj = cJSON_GetObjectItem(root, "cmds");
-    char *cmds = cmdsobj->valuestring;
+    char *cmds = handle->args;
     char code[16];
     int beatCnt;
     int next_cmd_pos = 0;
@@ -210,17 +207,20 @@ static void motor_run_cmds_task(void *args)
         if (next_cmd_pos < 0) {
             break;
         }
+        cmds += next_cmd_pos + 1;
 
         delaytime = beatCnt * BEAT_DURATION * 1000;
-        motor_run_one_cmd(code);
-        vTaskDelay(pdMS_TO_TICKS(delaytime));
+        if (code[0] == 'N' && code[1] == 'O') {
+            car_stop();
+        } else {
+            motor_run_one_cmd(code);
+        }
 
-        cmds += next_cmd_pos + 1;
+        vTaskDelay(pdMS_TO_TICKS(delaytime));
     }
 
     car_stop();
     handle->task_run = false;
-    cJSON_Delete(root);
     xEventGroupSetBits(handle->state_event, BIT0);
     vTaskDelete(NULL);
 }
@@ -236,7 +236,7 @@ esp_err_t motor_run_cmds_wait_for_stop(void)
     return ret;
 
 }
-esp_err_t motor_run_cmds_stop(void)
+int motor_run_cmds_stop(void)
 {
     motor_cmds_handle_t *handle = &g_motor_cmds_handler;
     if (false == handle->task_run) {
@@ -251,7 +251,7 @@ esp_err_t motor_run_cmds_stop(void)
 
 }
 /* @root: {type: M_CMDS, cmds:[]}, should call cJSON_Delete(root) to free memory */
-void motor_run_cmds(cJSON *root)
+void motor_run_cmds(char *str)
 {
     motor_cmds_handle_t *handle = &g_motor_cmds_handler;
     if (true == handle->task_run) {
@@ -259,7 +259,7 @@ void motor_run_cmds(cJSON *root)
     }
 
     handle->task_run = true;
-    handle->args = root;
+    handle->args = str;
     xTaskCreate(motor_run_cmds_task, "led_run_cmds_task", 4096, handle, 5, NULL);
 }
 

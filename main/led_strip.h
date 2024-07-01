@@ -15,7 +15,6 @@ typedef struct {
 } led_renderer_data_t;
 
 void led_strip_init(void);
-void led_chase(void);
 void led_on();
 
 /* 使用说明
@@ -26,7 +25,8 @@ esp_err_t led_strip_fill_data(led_renderer_data_t *data);
 esp_err_t led_strip_renderer_run(void);
 esp_err_t led_strip_renderer_stop(void);
 
-void led_run_cmds(cJSON *root);
+void led_run_cmds(char *str);
+int led_run_cmds_stop(void);
 
 
 #ifdef __cplusplus

@@ -18,8 +18,8 @@ void drv8833_motorB_stop(void);
 void drv8833_motorA_run(int speed, int direction);
 void drv8833_motorB_run(int speed, int direction);
 
-void motor_run_cmds(cJSON *root);
-
+void motor_run_cmds(char *str);
+int motor_run_cmds_stop();
 
 #ifdef __cplusplus
 }

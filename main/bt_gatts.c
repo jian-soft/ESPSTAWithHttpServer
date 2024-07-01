@@ -31,7 +31,7 @@
 #include "esp_gatt_common_api.h"
 #include "my_wifi.h"
 
-#define GATTS_TABLE_TAG "GATTS_TABLE_DEMO"
+#define GATTS_TABLE_TAG "GATTS"
 
 /*-----------business if-------------------------*/
 //BIT0: wifi config status
@@ -590,5 +590,16 @@ void bt_gatts_init_and_run(void)
     esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(500);
     if (local_mtu_ret){
         ESP_LOGE(GATTS_TABLE_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
+    }
+}
+
+void bt_disable()
+{
+    esp_err_t ret;
+
+    ret = esp_bluedroid_disable();
+    if (ret) {
+        ESP_LOGE(GATTS_TABLE_TAG, "disable bluetooth failed: %s", esp_err_to_name(ret));
+        return;
     }
 }

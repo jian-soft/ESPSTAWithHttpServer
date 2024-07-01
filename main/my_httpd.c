@@ -303,9 +303,9 @@ static esp_err_t echo_post_handler(httpd_req_t *req)
             cJSON *item = cJSON_GetObjectItem(root, "value");
             ESP_LOGI(TAG, "btn: value:%d", item->valueint);
             if (item->valueint == 1) {
-                sound_play_mp3(1);
+                //sound_play_mp3(1);
             } else if (item->valueint == 2) {
-                sound_play_mp3(0);
+                //sound_play_mp3(0);
             }
         }
         else if (0 == strcmp(type_string, "pitch")) {
@@ -316,7 +316,7 @@ static esp_err_t echo_post_handler(httpd_req_t *req)
             }
             ESP_LOGI(TAG, "pitch: value:%d", pitch);
 
-            float p2f[] = {261.626, 293.665, 329.628, 349.228, 391.995, 440.000, 493.883, 523.251};
+            //float p2f[] = {261.626, 293.665, 329.628, 349.228, 391.995, 440.000, 493.883, 523.251};
             //sound_play_freq(p2f[pitch]);
         }
         break;

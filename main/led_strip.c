@@ -13,8 +13,7 @@
 #include "led_strip_encoder.h"
 #include "io_assignment.h"
 #include "led_strip.h"
-
-#define BEAT_DURATION (0.6)  //一拍的时长，单位秒 100/min~0.6s/beat
+#include "utils.h"
 
 const static int LEDSTRIP_RENDERER_STOPPED_BIT = BIT0;
 
@@ -39,9 +38,20 @@ static led_cmds_handle_t g_led_cmds_handler;
 static uint8_t led_strip_pixels[EXAMPLE_LED_NUMBERS * 3];
 
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-#define EXAMPLE_CHASE_SPEED_MS      50
 
 static const char *TAG = "LED";
+
+void led_one_color(uint8_t r, uint8_t g, uint8_t b)
+{
+    led_renderer_data_t data;
+    for (int i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
+        data.pixels[i * 3 + 0] = g;
+        data.pixels[i * 3 + 1] = r;
+        data.pixels[i * 3 + 2] = b;
+    }
+    led_strip_fill_data(&data);
+}
+
 
 /**
  * @brief Simple helper function, converting HSV color space to RGB color space
@@ -95,57 +105,56 @@ void led_strip_hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t
     }
 }
 
-void led_chase(void)
+void led_chase(int beatCnt)
 {
+#define CHASE_SPEED_MS      75
+
     uint32_t red = 0;
     uint32_t green = 0;
     uint32_t blue = 0;
     uint16_t hue = 0;
     uint16_t start_rgb = 0;
-    led_renderer_data_t data;
+    led_renderer_data_t data = {0};
 
-    ESP_LOGI(TAG, "Start LED rainbow chase");
-    while (1) {
+    for (int j = 0; j < beatCnt; j++) {
         for (int i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
             // Build RGB pixels
             hue = i * 360 / EXAMPLE_LED_NUMBERS + start_rgb;
             led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
             data.pixels[i * 3 + 0] = green;
+            data.pixels[i * 3 + 1] = red;
             data.pixels[i * 3 + 1] = blue;
-            data.pixels[i * 3 + 2] = red;
-
             led_strip_fill_data(&data);
-            vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
+            vTaskDelay(pdMS_TO_TICKS(CHASE_SPEED_MS));
 
             memset(&data, 0, sizeof(led_renderer_data_t));
             led_strip_fill_data(&data);
-            vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
+            vTaskDelay(pdMS_TO_TICKS(CHASE_SPEED_MS));
         }
-        start_rgb += 60;
+        start_rgb += 50;
     }
 }
 
+
 void led_on()
 {
-    led_renderer_data_t data;
-    for (int i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
-        data.pixels[i * 3 + 0] = 0x9;
-        data.pixels[i * 3 + 1] = 0x9;
-        data.pixels[i * 3 + 2] = 0x9;
-    }
-    ESP_LOGI(TAG, "Turn on all LED");
-    led_strip_fill_data(&data);
+    led_one_color(20, 20, 20);
 }
 void led_off()
 {
-    led_renderer_data_t data;
-    for (int i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
-        data.pixels[i * 3 + 0] = 0;
-        data.pixels[i * 3 + 1] = 0;
-        data.pixels[i * 3 + 2] = 0;
-    }
-    led_strip_fill_data(&data);
+    led_one_color(0, 0, 0);
 }
+/* @count: blink times, each time cost 100ms */
+void led_blink(uint8_t r, uint8_t g, uint8_t b, int count)
+{
+    for (int i = 0; i < count; i++) {
+        led_one_color(r, g, b);
+        vTaskDelay(pdMS_TO_TICKS(50));
+        led_one_color(0, 0, 0);
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
 
 static rmt_channel_handle_t led_chan = NULL;
 static rmt_encoder_handle_t led_encoder = NULL;
@@ -238,41 +247,35 @@ esp_err_t led_strip_fill_data(led_renderer_data_t *data)
     return ESP_OK;
 }
 
-esp_err_t led_cmd2data(char *cmd)
+/* @return: 0-delay outside, 1-do not delay outside */
+int led_cmd2data(char *cmd, int beatCnt)
 {
-    int i;
-    led_renderer_data_t data;
+    int ret = 0;
     if (0 == strcmp(cmd, "R")) {
-        for (i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
-            data.pixels[i * 3 + 0] = 0x33;
-            data.pixels[i * 3 + 1] = 0x0;
-            data.pixels[i * 3 + 2] = 0x0;
-        }
-        led_strip_fill_data(&data);
+        led_one_color(0x33, 0, 0);
     } else if (0 == strcmp(cmd, "G")) {
-        for (i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
-            data.pixels[i * 3 + 0] = 0x0;
-            data.pixels[i * 3 + 1] = 0x33;
-            data.pixels[i * 3 + 2] = 0x0;
-        }
-        led_strip_fill_data(&data);
+        led_one_color(0, 0x33, 0);
     } else if (0 == strcmp(cmd, "B")) {
-        for (i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
-            data.pixels[i * 3 + 0] = 0x0;
-            data.pixels[i * 3 + 1] = 0x0;
-            data.pixels[i * 3 + 2] = 0x33;
-        }
-        led_strip_fill_data(&data);
+        led_one_color(0, 0, 0x33);
+    } else if (0 == strcmp(cmd, "RB")) {
+        led_blink(0x33, 0, 0, 6*beatCnt);
+        ret = 1;
+    } else if (0 == strcmp(cmd, "GB")) {
+        led_blink(0, 0x33, 0, 6*beatCnt);
+        ret = 1;
+    } else if (0 == strcmp(cmd, "BB")) {
+        led_blink(0, 0, 0x33, 6*beatCnt);
+        ret = 1;
+    } else if (0 == strcmp(cmd, "Chase")) {
+        led_chase(beatCnt);
+        ret = 1;
+    } else if (0 == strcmp(cmd, "OFF")) {
+        led_off();
     } else {
         ESP_LOGW(TAG, "unknow led cmd, display white");
-        for (i = 0; i < EXAMPLE_LED_NUMBERS; i++) {
-            data.pixels[i * 3 + 0] = 0x33;
-            data.pixels[i * 3 + 1] = 0x33;
-            data.pixels[i * 3 + 2] = 0x33;
-        }
-        led_strip_fill_data(&data);
+        led_one_color(0x33, 0x33, 0x33);
     }
-    return ESP_OK;
+    return ret;
 }
 
 
@@ -282,39 +285,110 @@ esp_err_t led_cmd2data(char *cmd)
     2) led_run_cmds_stop, 对外接口，结束线程
     3) led_run_cmds_wait_for_stop, 内部接口，等待线程结束，被led_run_cmds_stop调用
     4) led_run_cmds_task, 内部接口，最终创建的线程执行体
+    5) 可选 xxxx_init，将下面2)描述的初始化放到这个函数里
 
     1) 需要一个handle结构体(led_cmds_handle_t) + handle结构体对应的全局变量(g_led_cmds_handler)
     2) 全局变量里的EventGroupHandle_t成员需要调用xEventGroupCreate()初始化
+
+typedef struct {
+    volatile bool                    task_run;
+    EventGroupHandle_t               state_event;
+    void                            *args;
+} xxxx_handle_t;
+
+static xxxx_handle_t g_xxxx_handler;
+
+static void xxxx_task(void *args)
+{
+    xxxx_handle_t *handle = (xxxx_handle_t *)args;
+
+    while (handle->task_run) {
+
+    }
+    xEventGroupSetBits(handle->state_event, BIT0);
+    vTaskDelete(NULL);
+}
+static esp_err_t xxxx_wait_for_stop(void)
+{
+    EventBits_t uxBits = xEventGroupWaitBits(g_xxxx_handler.state_event, BIT0, true, true, 5000 / portTICK_RATE_MS);
+    esp_err_t ret = ESP_ERR_TIMEOUT;
+    if (uxBits & BIT0) {
+        ret = ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "wait for stop timeout.");
+    }
+    return ret;
+}
+esp_err_t xxxx_stop(void)
+{
+    xxxx_handle_t *handle = &g_xxxx_handler;
+    if (false == handle->task_run) {
+        return ESP_OK;
+    }
+
+    xEventGroupClearBits(handle->state_event, BIT0);
+    handle->task_run = false;
+    esp_err_t ret = xxxx_wait_for_stop();
+
+    return ret;
+}
+void xxxx_run(void)
+{
+    xxxx_handle_t *handle = &g_xxxx_handler;
+    if (true == handle->task_run) {
+        xxxx_stop();
+    }
+
+    handle.task_run = true;
+    xTaskCreate(xxxx_task, "xxxx_task", 4096, &g_xxxx_handler, 5, NULL);
+}
+void xxxx_init()
+{
+    g_xxxx_handler.state_event = xEventGroupCreate();
+}
+
 */
+extern void run_cmds_one_time_cb();
 static void led_run_cmds_task(void *args)
 {
     led_cmds_handle_t *handle = (led_cmds_handle_t *)args;
-    cJSON *root = handle->args;
-    cJSON *cmds = cJSON_GetObjectItem(root, "cmds");
-    cJSON *item, *icode, *ibeat;
+    char *cmds = handle->args;
+    char code[16];
+    int beatCnt;
+    int next_cmd_pos = 0;
     float delaytime;
+    int ret;
 
-    cJSON_ArrayForEach(item, cmds) {
+    while(*cmds) {
         if (!handle->task_run) {
             break;
         }
-
-        icode = cJSON_GetObjectItem(item, "code");
-        ibeat = cJSON_GetObjectItem(item, "beat");
-        if (!cJSON_IsString(icode) || !cJSON_IsNumber(ibeat)) {
+        next_cmd_pos = parse_cmd(cmds, code, &beatCnt);
+        if (next_cmd_pos < 0) {
             break;
         }
-        led_cmd2data(icode->valuestring);
+        cmds += next_cmd_pos + 1;
 
+        delaytime = beatCnt * BEAT_DURATION * 1000;
 
-        delaytime = ibeat->valuedouble * BEAT_DURATION*1000;
-        printf("dddd, beat:%f, delaytime:%f, toint:%d\n", ibeat->valuedouble, delaytime, (int)delaytime);
-        vTaskDelay(pdMS_TO_TICKS(delaytime));
+        if (code[0] == 'N' && code[1] == 'O') {
+            vTaskDelay(pdMS_TO_TICKS(delaytime));
+        } else {
+            ret = led_cmd2data(code, beatCnt);
+            if (0 == ret) {
+                vTaskDelay(pdMS_TO_TICKS(delaytime));
+            }
+        }
     }
 
-    handle->task_run = false;
-    led_off();
-    cJSON_Delete(root);
+    led_on();
+
+    if (handle->task_run) {
+        //end normal
+        handle->task_run = false;
+        run_cmds_one_time_cb();
+    }
+
     xEventGroupSetBits(handle->state_event, BIT0);
     vTaskDelete(NULL);
 }
@@ -329,7 +403,7 @@ static esp_err_t led_run_cmds_wait_for_stop(void)
     }
     return ret;
 }
-esp_err_t led_run_cmds_stop(void)
+int led_run_cmds_stop(void)
 {
     led_cmds_handle_t *handle = &g_led_cmds_handler;
     if (false == handle->task_run) {
@@ -343,7 +417,7 @@ esp_err_t led_run_cmds_stop(void)
     return ret;
 }
 /* @root: {type: L_CMDS, cmds:[]}, should call cJSON_Delete(root) to free memory */
-void led_run_cmds(cJSON *root)
+void led_run_cmds(char *str)
 {
     led_cmds_handle_t *handle = &g_led_cmds_handler;
     if (true == handle->task_run) {
@@ -351,7 +425,7 @@ void led_run_cmds(cJSON *root)
     }
 
     handle->task_run = true;
-    handle->args = root;
+    handle->args = str;
     xTaskCreate(led_run_cmds_task, "led_run_cmds_task", 4096, handle, 5, NULL);
 }
 

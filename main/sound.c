@@ -27,24 +27,10 @@ static const char err_reason[][30] = {"input param is invalid",
 static data_listen_cb g_data_listen_cb;
 static i2s_chan_handle_t                tx_chan;        // I2S tx channel handler
 
-typedef struct {
-    /* Task related */
-    volatile bool                    task_run;             /*!< Component running status */
-    EventGroupHandle_t               state_event;          /*!< Task's state event group */
-    int                              fileid;
-} sound_play_mp3_handle_t;
-
-static sound_play_mp3_handle_t g_playmp3_handle;
-const static int SOUND_PLAYMP3_STOPPED_BIT = BIT0;
-
-
 
 SemaphoreHandle_t g_i2s_mutex = NULL;
 
-#define BEAT_DURATION 0.6  //一拍的时长，单位秒
-
 #define MY_SR 16000.0
-
 
 // Linear interpolation
 float lerp(float x, float x1, float x2, float y1, float y2) {
@@ -81,39 +67,22 @@ float adsr(float sample, float t, float duration)
 }
 
 
+#define BUFF_SIZE 800
+int16_t g_i2s_data_buffer[BUFF_SIZE];
 
-
+/**************play notes task begin*****************/
 float g_sample_rate;
 float g_freq;
 float g_inv_freq;
-int tick_idx;
+int g_tick_idx;
 float g_duration;
-
-static void square_init(float freq)
-{
-    g_sample_rate = MY_SR;
-    g_freq = freq;
-    g_inv_freq = 1.0 / freq;
-}
-static int16_t square_tick(int idx)
-{
-    float mod;
-
-    mod = fmod((float)idx / g_sample_rate, g_inv_freq);
-
-    if (mod >= (g_inv_freq/2.0)) {
-        return 5000;
-    } else {
-        return -5000;
-    }
-}
 
 static void saw_reset(float freq, float beat_cnt)
 {
     g_sample_rate = MY_SR;
     g_freq = freq;
     g_inv_freq = 1.0 / freq;
-    tick_idx = 0;
+    g_tick_idx = 0;
     g_duration = beat_cnt * BEAT_DURATION;
 }
 /*
@@ -122,7 +91,7 @@ static void saw_reset(float freq, float beat_cnt)
 */
 static inline int saw_tick(int16_t *tick_out)
 {
-    float t = (float)tick_idx/g_sample_rate;
+    float t = (float)g_tick_idx/g_sample_rate;
     if (t >= g_duration) {
         return 0;
     }
@@ -132,7 +101,7 @@ static inline int saw_tick(int16_t *tick_out)
     out = adsr(out, t, g_duration);
     *tick_out = (int16_t)(5000 * out);
 
-    tick_idx++;
+    g_tick_idx++;
     return 1;
 }
 
@@ -161,56 +130,75 @@ static float note_to_freq(char *note)
         return notes_table[idx];
     }
 
-    return 261.626;
+    return 0.0;
 }
 
 
-#define BUFF_SIZE 800
-int16_t g_i2s_data_buffer[BUFF_SIZE];
-static void i2s_task_play_notes(void *args)
-{
-    cJSON *root = (cJSON *)args;
+typedef struct {
+    volatile bool                    task_run;
+    EventGroupHandle_t               state_event;
+    void                            *args;
+} play_notes_handle_t;
 
+static play_notes_handle_t g_play_notes_handler;
+
+static void play_notes_task(void *args)
+{
+    play_notes_handle_t *handle = (play_notes_handle_t *)args;
     esp_err_t ret = ESP_OK;
     ret = xSemaphoreTake(g_i2s_mutex, 0);
     if (pdTRUE != ret) {
         vTaskDelete(NULL);
-        cJSON_Delete(root);
         return;
     }
 
     size_t bytes_write = 0, total_write = 0;
     int bf_size, tick_ret;
-    cJSON *notesobj = cJSON_GetObjectItem(root, "notes");
-    char *notes = notesobj->valuestring;
+    char *notes = handle->args;
     char label[4];
     int beatCnt;
     int next_cmd_pos = 0;
     float freq;
 
-    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
     while(*notes) {
+        if (!handle->task_run) {
+            break;
+        }
         next_cmd_pos = parse_cmd(notes, label, &beatCnt);
         if (next_cmd_pos < 0) {
             break;
         }
+        notes += next_cmd_pos + 1;
+
+        if (label[0] == 'N' && label[1] == 'O') {
+            vTaskDelay(pdMS_TO_TICKS(beatCnt * BEAT_DURATION * 1000));
+            continue;
+        }
         freq = note_to_freq(label);
-        printf("dddd, label: %s, beatCnt: %d, freq:%f\n", label, beatCnt, freq);
+        if (0.0 == freq) {
+            vTaskDelay(pdMS_TO_TICKS(beatCnt * BEAT_DURATION * 1000));
+            continue;
+        }
 
         tick_ret = 1;
         saw_reset(freq, beatCnt);
+        ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
         while (tick_ret) {
             for (bf_size = 0; bf_size < BUFF_SIZE; bf_size++) {
+                if (!handle->task_run) {
+                    break;
+                }
                 tick_ret = saw_tick(g_i2s_data_buffer + bf_size);
                 if (0 == tick_ret) {
                     break;
                 }
             }
-
             if (0 == bf_size) {
                 break;
             }
-
+            if (!handle->task_run) {
+                break;
+            }
             ret = i2s_channel_write(tx_chan, g_i2s_data_buffer, bf_size*2, &bytes_write, portMAX_DELAY);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
@@ -223,17 +211,166 @@ static void i2s_task_play_notes(void *args)
                abort();
             }
         }
+        ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
 
-        notes += next_cmd_pos + 1;
+
     }
 
 
     ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
-    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
+
     xSemaphoreGive(g_i2s_mutex);
-    cJSON_Delete(root);
+
+    handle->task_run = false;
+    xEventGroupSetBits(handle->state_event, BIT0);
     vTaskDelete(NULL);
 }
+static esp_err_t play_notes_wait_for_stop(void)
+{
+    EventBits_t uxBits = xEventGroupWaitBits(g_play_notes_handler.state_event, BIT0, true, true, 5000 / portTICK_RATE_MS);
+    esp_err_t ret = ESP_ERR_TIMEOUT;
+    if (uxBits & BIT0) {
+        ret = ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "wait for stop timeout.");
+    }
+    return ret;
+}
+int play_notes_stop(void)
+{
+    play_notes_handle_t *handle = &g_play_notes_handler;
+    if (false == handle->task_run) {
+        return ESP_OK;
+    }
+
+    xEventGroupClearBits(handle->state_event, BIT0);
+    handle->task_run = false;
+    esp_err_t ret = play_notes_wait_for_stop();
+
+    return ret;
+}
+void play_notes_run(char *str)
+{
+    play_notes_handle_t *handle = &g_play_notes_handler;
+    if (true == handle->task_run) {
+        play_notes_stop();
+    }
+
+    handle->task_run = true;
+    handle->args = str;
+    xTaskCreate(play_notes_task, "play_notes_task", 4096, &g_play_notes_handler, 5, NULL);
+}
+void play_notes_init()
+{
+    g_play_notes_handler.state_event = xEventGroupCreate();
+}
+/**************play notes task end********************/
+/**************play mp3 task start********************/
+typedef struct {
+    /* Task related */
+    volatile bool                    task_run;             /*!< Component running status */
+    EventGroupHandle_t               state_event;          /*!< Task's state event group */
+    int                              fileid;
+} sound_play_mp3_handle_t;
+
+static sound_play_mp3_handle_t g_playmp3_handle;
+
+static void sound_play_mp3_task(void *args)
+{
+#define READ_LEN 1024
+    char *raw_buffer = (char *)g_i2s_data_buffer;
+    sound_play_mp3_handle_t *handle = (sound_play_mp3_handle_t *)args;
+
+    esp_err_t ret = ESP_OK;
+    ret = xSemaphoreTake(g_i2s_mutex, 0);
+    if (pdTRUE != ret) {
+        handle->task_run = false;
+        goto out;
+    }
+
+    play_mp3_start_pipeline(handle->fileid);
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
+
+    int read_len;
+    size_t bytes_write = 0, total_write = 0;
+    while(handle->task_run) {
+        read_len = play_mp3_read_buffer(raw_buffer, READ_LEN);
+        if (read_len <= 0) {
+            break;
+        }
+
+        if (g_data_listen_cb) {
+            g_data_listen_cb(raw_buffer, read_len);
+        }
+
+        ret = i2s_channel_write(tx_chan, raw_buffer, read_len, &bytes_write, portMAX_DELAY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
+            abort();
+        }
+        if (bytes_write > 0) {
+           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
+           total_write += bytes_write;
+        } else {
+           ESP_LOGE(TAG, "[music] i2s music play falied.");
+           abort();
+        }
+    }
+    handle->task_run = false;
+    ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
+
+    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
+    xSemaphoreGive(g_i2s_mutex);
+
+out:
+    xEventGroupSetBits(handle->state_event, BIT0);
+    vTaskDelete(NULL);
+}
+
+esp_err_t sound_play_mp3_wait_for_stop(sound_play_mp3_handle_t *handle)
+{
+    EventBits_t uxBits = xEventGroupWaitBits(handle->state_event, BIT0, true, true, 500 / portTICK_RATE_MS);
+    esp_err_t ret = ESP_ERR_TIMEOUT;
+    if (uxBits & BIT0) {
+        ret = ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "wait for play-mp3 stop timeout.");
+    }
+    return ret;
+}
+
+esp_err_t sound_play_mp3_stop(void)
+{
+    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
+    if (false == handle->task_run) {
+        return ESP_OK;
+    }
+
+    xEventGroupClearBits(handle->state_event, BIT0);
+    handle->task_run = false;
+    esp_err_t ret = sound_play_mp3_wait_for_stop(handle);
+
+    return ret;
+}
+
+void sound_play_mp3_run(int fileid)
+{
+    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
+    if (true == handle->task_run) {
+        sound_play_mp3_stop();
+    }
+
+    handle->task_run = true;
+    handle->fileid = fileid;
+    xTaskCreate(sound_play_mp3_task, "play_mp3_task", 4096, handle, 5, NULL);
+}
+
+void sound_play_mp3_init()
+{
+    g_playmp3_handle.state_event = xEventGroupCreate();
+}
+/**************play mp3 task end********************/
+
 
 static void i2s_example_init_std_simplex(void)
 {
@@ -278,106 +415,10 @@ void sound_init()
         abort();
     }
 
-    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
-    handle->state_event = xEventGroupCreate();
+    sound_play_mp3_init();
+    play_notes_init();
 }
 
-/* @root: {type: S_NOTES, notes:[]}, should call cJSON_Delete(root) to free memory */
-void sound_play_notes(cJSON *root)
-{
-    xTaskCreate(i2s_task_play_notes, "play_notes_task", 4096, root, 5, NULL);
-}
-
-static void i2s_task_play_mp3(void *args)
-{
-#define READ_LEN 1024
-    char *raw_buffer = (char *)g_i2s_data_buffer;
-    sound_play_mp3_handle_t *handle = (sound_play_mp3_handle_t *)args;
-
-    esp_err_t ret = ESP_OK;
-    ret = xSemaphoreTake(g_i2s_mutex, 0);
-    if (pdTRUE != ret) {
-        handle->task_run = false;
-        goto out;
-    }
-
-    play_mp3_start_pipeline(handle->fileid);
-
-    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
-
-    int read_len;
-    size_t bytes_write = 0, total_write = 0;
-    while(handle->task_run) {
-        read_len = play_mp3_read_buffer(raw_buffer, READ_LEN);
-        if (read_len <= 0) {
-            break;
-        }
-
-        if (g_data_listen_cb) {
-            g_data_listen_cb(raw_buffer, read_len);
-        }
-
-        ret = i2s_channel_write(tx_chan, raw_buffer, read_len, &bytes_write, portMAX_DELAY);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "[music] i2s write failed, %s", err_reason[ret == ESP_ERR_TIMEOUT]);
-            abort();
-        }
-        if (bytes_write > 0) {
-           //ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", bytes_write);
-           total_write += bytes_write;
-        } else {
-           ESP_LOGE(TAG, "[music] i2s music play falied.");
-           abort();
-        }
-    }
-    handle->task_run = false;
-    ESP_LOGI(TAG, "[music] i2s music played, %d bytes are written.", total_write);
-
-    ESP_ERROR_CHECK(i2s_channel_disable(tx_chan));
-    xSemaphoreGive(g_i2s_mutex);
-
-out:
-    xEventGroupSetBits(handle->state_event, SOUND_PLAYMP3_STOPPED_BIT);
-    vTaskDelete(NULL);
-}
-
-esp_err_t sound_play_mp3_wait_for_stop(sound_play_mp3_handle_t *handle)
-{
-    EventBits_t uxBits = xEventGroupWaitBits(handle->state_event, SOUND_PLAYMP3_STOPPED_BIT, true, true, 500 / portTICK_RATE_MS);
-    esp_err_t ret = ESP_ERR_TIMEOUT;
-    if (uxBits & SOUND_PLAYMP3_STOPPED_BIT) {
-        ret = ESP_OK;
-    } else {
-        ESP_LOGE(TAG, "wait for play-mp3 stop timeout.");
-    }
-    return ret;
-}
-
-esp_err_t sound_play_mp3_stop(void)
-{
-    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
-    if (false == handle->task_run) {
-        return ESP_OK;
-    }
-
-    xEventGroupClearBits(handle->state_event, SOUND_PLAYMP3_STOPPED_BIT);
-    handle->task_run = false;
-    esp_err_t ret = sound_play_mp3_wait_for_stop(handle);
-
-    return ret;
-}
-
-void sound_play_mp3(int fileid)
-{
-    sound_play_mp3_handle_t *handle = &g_playmp3_handle;
-    if (true == handle->task_run) {
-        sound_play_mp3_stop();
-    }
-
-    handle->task_run = true;
-    handle->fileid = fileid;
-    xTaskCreate(i2s_task_play_mp3, "play_mp3_task", 4096, handle, 5, NULL);
-}
 
 
 void sound_register_data_listen_cb(data_listen_cb cb)
