@@ -15,19 +15,13 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "io_assignment.h"
-
+#include "ucp.h"
 
 const static char *TAG = "ADC";
 
 /*---------------------------------------------------------------
         ADC General Macros
 ---------------------------------------------------------------*/
-
-
-//static int adc_raw[2][10];
-//static int voltage[2][10];
-static int g_adc_raw;
-static int g_voltage;
 static bool example_adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
 static void example_adc_calibration_deinit(adc_cali_handle_t handle);
 
@@ -38,16 +32,14 @@ static adc_cali_handle_t adc1_cali_chan_handle = NULL;
 static bool do_calibration1;
 
 /* @return: the voltage, mV */
-int adc_get_voltage()
+static void adc_get_voltage(int *vol)
 {
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN0, &g_adc_raw));
-    if (do_calibration1) {
-        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan_handle, g_adc_raw, &g_voltage));
-        //ESP_LOGI(TAG, "ADC%d Channel[%d] Cali Voltage: %d mV", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN0, g_voltage);
-        return g_voltage;
-    }
+    int adc_raw = 0;
 
-    return 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN0, &adc_raw));
+    if (do_calibration1) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan_handle, adc_raw, vol));
+    }
 }
 
 void adc_deinit()
@@ -124,7 +116,7 @@ static void example_adc_calibration_deinit(adc_cali_handle_t handle)
 }
 
 /***********************adc voltage check task************************/
-#if 0
+#if 1
 typedef struct {
     volatile bool                    task_run;
     EventGroupHandle_t               state_event;
@@ -136,13 +128,22 @@ static voltage_handle_t g_voltage_handler;
 static void voltage_task(void *args)
 {
     voltage_handle_t *handle = (voltage_handle_t *)args;
+    static char buf[100];
+    int vol;
+    int print_count = 0;
 
     while (handle->task_run) {
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        adc_get_voltage();
+        vTaskDelay(pdMS_TO_TICKS(33));
+        adc_get_voltage(&vol);
+        sprintf(buf, "bat:%d", vol);
+        ucp_send_heart_beat((uint8_t *)buf, strlen(buf));
+        ucp_send_video((uint8_t *)buf, sizeof(buf));
 
-
+        print_count++;
+        if (0 == print_count % 30)
+            ucp_print_stats();
     }
+
     xEventGroupSetBits(handle->state_event, BIT0);
     vTaskDelete(NULL);
 }
@@ -203,7 +204,7 @@ void adc_init()
     //-------------ADC1 Calibration Init---------------//
     do_calibration1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, ADC_ATTEN_DB_11, &adc1_cali_chan_handle);
 
-    //voltage_task_init_and_run();
+    voltage_task_init_and_run();
 }
 
 

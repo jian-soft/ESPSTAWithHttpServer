@@ -9,7 +9,6 @@
 #include "drv8833_pwm.h"
 #include "led_strip.h"
 #include "handle_message.h"
-#include "my_udp.h"
 
 static const char *TAG = "handle";
 
@@ -43,7 +42,8 @@ static void run_cmds_task(void *pvParameters)
         motor_run_cmds(r_v3->valuestring);
         led_run_cmds(r_v4->valuestring);
     } else {
-        udp_send_msg("run,0", 5);
+        //udp_send_msg("run,0", 5);
+        //TBD
         run_cmds_is_run = 0;
     }
 
@@ -85,7 +85,7 @@ void run_cmds(cJSON *root)
     led_run_cmds(r_v4->valuestring);
 }
 
-int handle_message(char *json_str_in, char *json_str_out)
+int handle_message(char *json_str_in)
 {
     int ret = -1;
     cJSON *root, *type;
@@ -112,8 +112,6 @@ int handle_message(char *json_str_in, char *json_str_out)
                 goto out;
             }
 
-            ESP_LOGI(TAG, "M_RUN: m1d:%d, m1s:%d, m2d:%d, m2s:%d",
-                d1->valueint, s1->valueint, d2->valueint, s2->valueint);
             gpio_enable_drv8833();
             drv8833_motorA_run(s1->valueint, d1->valueint);
             drv8833_motorB_run(s2->valueint, d2->valueint);
@@ -144,7 +142,8 @@ int handle_message(char *json_str_in, char *json_str_out)
             led_run_cmds_stop();
             play_notes_stop();
             printf("dddd, send run 0 msg\n");
-            udp_send_msg("run,0", 5);
+            //udp_send_msg("run,0", 5);
+            //TBD
         }
         break;
     }

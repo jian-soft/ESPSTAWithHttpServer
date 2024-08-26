@@ -34,20 +34,20 @@ static struct marker {
 } file_marker;
 
 
-extern const uint8_t didi_start[] asm("_binary_didi_1c_16khz_mp3_start");
-extern const uint8_t didi_end[]   asm("_binary_didi_1c_16khz_mp3_end");
-extern const uint8_t gun_start[] asm("_binary_gun_1c_16khz_mp3_start");
-extern const uint8_t gun_end[]   asm("_binary_gun_1c_16khz_mp3_end");
-extern const uint8_t canon_start[] asm("_binary_canon_1c_16khz_21s_mp3_start");
-extern const uint8_t canon_end[]   asm("_binary_canon_1c_16khz_21s_mp3_end");
-extern const uint8_t croatian_start[] asm("_binary_Croatian_1c_16khz_12s_mp3_start");
-extern const uint8_t croatian_end[]   asm("_binary_Croatian_1c_16khz_12s_mp3_end");
-extern const uint8_t galway_start[] asm("_binary_Galway_1c_16khz_18s_mp3_start");
-extern const uint8_t galway_end[]   asm("_binary_Galway_1c_16khz_18s_mp3_end");
-extern const uint8_t vivacity_start[] asm("_binary_Vivacity_1c_16khz_20s_mp3_start");
-extern const uint8_t vivacity_end[]   asm("_binary_Vivacity_1c_16khz_20s_mp3_end");
-extern const uint8_t aiyaya_start[] asm("_binary_aiyaya_1c_16khz_23s_mp3_start");
-extern const uint8_t aiyaya_end[]   asm("_binary_aiyaya_1c_16khz_23s_mp3_end");
+extern uint8_t didi_start[] asm("_binary_didi_1c_16khz_mp3_start");
+extern uint8_t didi_end[]   asm("_binary_didi_1c_16khz_mp3_end");
+extern uint8_t gun_start[] asm("_binary_gun_1c_16khz_mp3_start");
+extern uint8_t gun_end[]   asm("_binary_gun_1c_16khz_mp3_end");
+extern uint8_t canon_start[] asm("_binary_canon_1c_16khz_21s_mp3_start");
+extern uint8_t canon_end[]   asm("_binary_canon_1c_16khz_21s_mp3_end");
+extern uint8_t croatian_start[] asm("_binary_Croatian_1c_16khz_12s_mp3_start");
+extern uint8_t croatian_end[]   asm("_binary_Croatian_1c_16khz_12s_mp3_end");
+extern uint8_t galway_start[] asm("_binary_Galway_1c_16khz_18s_mp3_start");
+extern uint8_t galway_end[]   asm("_binary_Galway_1c_16khz_18s_mp3_end");
+extern uint8_t vivacity_start[] asm("_binary_Vivacity_1c_16khz_20s_mp3_start");
+extern uint8_t vivacity_end[]   asm("_binary_Vivacity_1c_16khz_20s_mp3_end");
+extern uint8_t aiyaya_start[] asm("_binary_aiyaya_1c_16khz_23s_mp3_start");
+extern uint8_t aiyaya_end[]   asm("_binary_aiyaya_1c_16khz_23s_mp3_end");
 
 
 

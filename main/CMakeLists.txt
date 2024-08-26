@@ -1,7 +1,6 @@
 idf_component_register(
 	SRCS
 		"main.c"
-		"my_httpd.c"
 		"my_gpio.c"
 		"drv8833_pwm.c"
 		"my_wifi.c"
@@ -9,7 +8,6 @@ idf_component_register(
 		"led_strip.c"
 		"led_strip_encoder.c"
 		"my_adc.c"
-		"my_udp.c"
 		"handle_message.c"
 		"my_play_mp3.c"
 		"audio_convert.c"
@@ -17,6 +15,7 @@ idf_component_register(
 		"esp_color.c"
 		"bt_gatts.c"
 		"utils.c"
+		"my_ucp.c"
 	INCLUDE_DIRS "."
 		"cnv_lib/cnv_audio"
 		"cnv_lib/cnv_basic"
@@ -28,13 +27,6 @@ idf_component_register(
 		"mmfile/Croatian_1c_16khz_12s.mp3"
 		"mmfile/Galway_1c_16khz_18s.mp3"
 		"mmfile/Vivacity_1c_16khz_20s.mp3")
-
-set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../web")
-if(EXISTS ${WEB_SRC_DIR}/dist)
-	spiffs_create_partition_image(www ${WEB_SRC_DIR}/dist FLASH_IN_PROJECT)
-else()
-	message(FATAL_ERROR "${WEB_SRC_DIR}/dist doesn't exit. Please run 'npm run build' in ${WEB_SRC_DIR}")
-endif()
 
 add_prebuilt_library(convert "${CMAKE_CURRENT_SOURCE_DIR}/cnv_lib/lib/${CONFIG_IDF_TARGET}/libconvert.a")
 

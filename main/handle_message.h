@@ -96,7 +96,7 @@ typedef unsigned int enum_message_type;
 
 
 
-int handle_message(char *json_in, char *json_out);
+int handle_message(char *json_in);
 
 
 
