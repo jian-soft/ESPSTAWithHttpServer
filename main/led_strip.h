@@ -16,6 +16,10 @@ typedef struct {
 
 void led_strip_init(void);
 void led_on();
+void led_blink(uint8_t r, uint8_t g, uint8_t b, int count);
+void led_blink2(uint8_t r, uint8_t g, uint8_t b);
+void led_one_color2(uint8_t r, uint8_t g, uint8_t b, uint8_t num);
+
 
 /* 使用说明
     默认led_strip_renderer_run已经被调用，已经起了led线程

@@ -7,8 +7,10 @@ extern "C" {
 #endif
 
 void adc_init(void);
-int adc_get_voltage();
 void adc_deinit();
+
+void adc_get_voltage(int *vol);
+
 
 
 #ifdef __cplusplus

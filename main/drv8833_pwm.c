@@ -82,11 +82,17 @@ void pwm_init(void)
     g_motor_cmds_handler.state_event = xEventGroupCreate();
 }
 
+static unsigned int g_is_motorA_run;
+static unsigned int g_is_motorB_run;
+
+unsigned int is_motor_run()
+{
+    return g_is_motorA_run | g_is_motorB_run;
+}
 
 /* @speed: 0~100 @direction: >=0-foward -1-back */
 void drv8833_motorA_run(int speed, int direction)
 {
-    //if (speed < 25) speed = 25;
     int duty = speed*1024/100;
     if (direction >= 0) {
         ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty));
@@ -94,13 +100,16 @@ void drv8833_motorA_run(int speed, int direction)
     } else {
         ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0));
         ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, duty));
-
     }
-
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1));
-}
 
+    if (speed) {
+        g_is_motorA_run = 1;
+    } else {
+        g_is_motorA_run = 0;
+    }
+}
 
 void drv8833_motorA_stop(void)
 {
@@ -108,6 +117,7 @@ void drv8833_motorA_stop(void)
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 1024));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1));
+    g_is_motorA_run = 0;
 }
 
 void drv8833_motorB_run(int speed, int direction)
@@ -121,9 +131,14 @@ void drv8833_motorB_run(int speed, int direction)
         ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, duty));
 
     }
-
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3));
+
+    if (speed) {
+        g_is_motorB_run = 1;
+    } else {
+        g_is_motorB_run = 0;
+    }
 }
 
 void drv8833_motorB_stop(void)
@@ -132,6 +147,7 @@ void drv8833_motorB_stop(void)
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 1024));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3));
+    g_is_motorB_run = 0;
 }
 
 void car_forward(int speed1, int speed2)

@@ -7,7 +7,7 @@ extern "C" {
 #endif
 
 #define   CNV_PATTERN_RED_BASE_VALUE    (90)
-#define   CNV_PATTERN_COLOR_SPAN        (3)
+#define   CNV_PATTERN_COLOR_SPAN        (30)
 #define   CNV_PATTERN_GREEN_BASE_VALUE  (10)
 
 

@@ -52,6 +52,27 @@ void led_one_color(uint8_t r, uint8_t g, uint8_t b)
     led_strip_fill_data(&data);
 }
 
+void led_one_color2(uint8_t r, uint8_t g, uint8_t b, uint8_t num)
+{
+    led_renderer_data_t data;
+    int i;
+    if (num > 4) num = 4;
+
+    for (i = 0; i < num; i++) {
+        data.pixels[i * 3 + 0] = g;
+        data.pixels[i * 3 + 1] = r;
+        data.pixels[i * 3 + 2] = b;
+    }
+
+    for (i = num; i < EXAMPLE_LED_NUMBERS; i++) {
+        data.pixels[i * 3 + 0] = 0;
+        data.pixels[i * 3 + 1] = 0;
+        data.pixels[i * 3 + 2] = 0;
+    }
+
+    led_strip_fill_data(&data);
+}
+
 
 /**
  * @brief Simple helper function, converting HSV color space to RGB color space
@@ -138,7 +159,7 @@ void led_chase(int beatCnt)
 
 void led_on()
 {
-    led_one_color(20, 20, 20);
+    led_one_color(5, 5, 5);
 }
 void led_off()
 {
@@ -154,6 +175,15 @@ void led_blink(uint8_t r, uint8_t g, uint8_t b, int count)
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
+
+void led_blink2(uint8_t r, uint8_t g, uint8_t b)
+{
+    led_one_color(r, g, b);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    led_one_color(0, 0, 0);
+    vTaskDelay(pdMS_TO_TICKS(500));
+}
+
 
 
 static rmt_channel_handle_t led_chan = NULL;
@@ -428,6 +458,5 @@ void led_run_cmds(char *str)
     handle->args = str;
     xTaskCreate(led_run_cmds_task, "led_run_cmds_task", 4096, handle, 5, NULL);
 }
-
 
 

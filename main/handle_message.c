@@ -115,6 +115,27 @@ int handle_message(char *json_str_in)
             gpio_enable_drv8833();
             drv8833_motorA_run(s1->valueint, d1->valueint);
             drv8833_motorB_run(s2->valueint, d2->valueint);
+
+            //扩充一个键值属性
+            cJSON *key = cJSON_GetObjectItem(root, "k");
+            if (NULL == key) {
+                goto out;
+            }
+            static int last_key;
+            if (last_key == key->valueint) {
+                goto out;
+            }
+            last_key = key->valueint;
+
+            if (1 == key->valueint) {
+                sound_play_mp3_run(0);  //play didi
+            } else if (2 == key->valueint) {
+                sound_play_mp3_run(1);  //play gun
+            } else if (3 == key->valueint) {
+                sound_play_mp3_run(0xF);  //play next music
+            } else if (4 == key->valueint) {
+                //do nothing
+            }
         }
         break;
         case M_STOP: {

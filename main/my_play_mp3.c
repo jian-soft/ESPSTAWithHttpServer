@@ -53,6 +53,7 @@ extern uint8_t aiyaya_end[]   asm("_binary_aiyaya_1c_16khz_23s_mp3_end");
 
 static void set_next_file_marker(int fileid)
 {
+    static int next_music_file = 1;
     static uint8_t *mp3_start[] = {
             didi_start,
             gun_start,
@@ -71,6 +72,15 @@ static void set_next_file_marker(int fileid)
             vivacity_end,
             aiyaya_end
         };
+
+    if (0xF == fileid) {
+        next_music_file++;
+        if (next_music_file > 6) {
+            next_music_file = 2;
+        }
+
+        fileid = next_music_file;
+    }
 
 
     if (fileid < 0 || fileid >= 7) {

@@ -22,6 +22,8 @@ int play_notes_stop(void);
 void sound_play_mp3_run(int fileid);
 void sound_register_data_listen_cb(data_listen_cb);
 
+int is_sound_play_run();
+
 #ifdef __cplusplus
 }
 #endif

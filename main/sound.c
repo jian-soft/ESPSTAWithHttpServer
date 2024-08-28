@@ -275,6 +275,11 @@ typedef struct {
 
 static sound_play_mp3_handle_t g_playmp3_handle;
 
+int is_sound_play_run()
+{
+    return g_playmp3_handle.task_run;
+}
+
 static void sound_play_mp3_task(void *args)
 {
 #define READ_LEN 1024

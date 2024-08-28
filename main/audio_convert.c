@@ -117,12 +117,11 @@ void cnv_pattern_myenergy_mode(void *source_data, int data_len)
     cnv_audio_process(audio, source_data, NULL, data_len, CNV_AUDIO_VOLUME);
     cnv_audio_get_volume(audio, &volume);
     level = volume * (EXAMPLE_LED_NUMBERS) / 100;  //0 1 2 3 4
-    printf("dddd, level:%d\n", level);
 
     for (int x = 0; x < level; x ++) {
-        red = CNV_PATTERN_RED_BASE_VALUE - CNV_PATTERN_COLOR_SPAN * x;
-        green = 0;
-        blue = CNV_PATTERN_GREEN_BASE_VALUE + CNV_PATTERN_COLOR_SPAN * x;
+        red = (CNV_PATTERN_RED_BASE_VALUE - CNV_PATTERN_COLOR_SPAN * x)>>3;
+        green = (CNV_PATTERN_GREEN_BASE_VALUE + CNV_PATTERN_COLOR_SPAN * x)>>3;
+        blue =  (250 - 40 * x)>>3;
 
         leddata.pixels[x*3] = red;
         leddata.pixels[x*3 + 1] = green;
@@ -140,9 +139,7 @@ static void audio_convert_task(void *args)
 
     while (handle->task_run) {
         if (xQueueReceive(handle->in_queue, &sample, portMAX_DELAY) == pdTRUE) {
-
             cnv_pattern_myenergy_mode(sample.data, sample.len);
-
         }
     }
     xEventGroupSetBits(handle->state_event, AUDIO_CONVERT_STOPPED_BIT);

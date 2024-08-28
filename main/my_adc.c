@@ -32,7 +32,7 @@ static adc_cali_handle_t adc1_cali_chan_handle = NULL;
 static bool do_calibration1;
 
 /* @return: the voltage, mV */
-static void adc_get_voltage(int *vol)
+void adc_get_voltage(int *vol)
 {
     int adc_raw = 0;
 
@@ -115,77 +115,6 @@ static void example_adc_calibration_deinit(adc_cali_handle_t handle)
 #endif
 }
 
-/***********************adc voltage check task************************/
-#if 1
-typedef struct {
-    volatile bool                    task_run;
-    EventGroupHandle_t               state_event;
-    void                            *args;
-} voltage_handle_t;
-
-static voltage_handle_t g_voltage_handler;
-
-static void voltage_task(void *args)
-{
-    voltage_handle_t *handle = (voltage_handle_t *)args;
-    static char buf[100];
-    int vol;
-    int print_count = 0;
-
-    while (handle->task_run) {
-        vTaskDelay(pdMS_TO_TICKS(33));
-        adc_get_voltage(&vol);
-        sprintf(buf, "bat:%d", vol);
-        ucp_send_heart_beat((uint8_t *)buf, strlen(buf));
-        ucp_send_video((uint8_t *)buf, sizeof(buf));
-
-        print_count++;
-        if (0 == print_count % 30)
-            ucp_print_stats();
-    }
-
-    xEventGroupSetBits(handle->state_event, BIT0);
-    vTaskDelete(NULL);
-}
-static esp_err_t voltage_task_wait_for_stop(void)
-{
-    EventBits_t uxBits = xEventGroupWaitBits(g_voltage_handler.state_event, BIT0, true, true, 5000 / portTICK_RATE_MS);
-    esp_err_t ret = ESP_ERR_TIMEOUT;
-    if (uxBits & BIT0) {
-        ret = ESP_OK;
-    } else {
-        ESP_LOGE(TAG, "wait for stop timeout.");
-    }
-    return ret;
-}
-esp_err_t voltage_task_stop(void)
-{
-    voltage_handle_t *handle = &g_voltage_handler;
-    if (false == handle->task_run) {
-        return ESP_OK;
-    }
-
-    xEventGroupClearBits(handle->state_event, BIT0);
-    handle->task_run = false;
-    esp_err_t ret = voltage_task_wait_for_stop();
-
-    return ret;
-}
-esp_err_t voltage_task_run(void)
-{
-    g_voltage_handler.task_run = true;
-    xTaskCreate(voltage_task, "voltage_task", 4096, &g_voltage_handler, 5, NULL);
-    return ESP_OK;
-}
-void voltage_task_init_and_run()
-{
-    g_voltage_handler.state_event = xEventGroupCreate();
-    voltage_task_run();
-}
-#endif
-/***********************adc voltage check task************************/
-
-
 void adc_init()
 {
     //-------------ADC1 Init---------------//
@@ -203,8 +132,6 @@ void adc_init()
 
     //-------------ADC1 Calibration Init---------------//
     do_calibration1 = example_adc_calibration_init(ADC_UNIT_1, EXAMPLE_ADC1_CHAN0, ADC_ATTEN_DB_11, &adc1_cali_chan_handle);
-
-    voltage_task_init_and_run();
 }
 
 
