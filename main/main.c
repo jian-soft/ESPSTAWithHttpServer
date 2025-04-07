@@ -27,6 +27,7 @@
 #include "audio_convert.h"
 #include "bt_gatts.h"
 #include "ucp.h"
+#include "driver/gpio.h"
 
 
 
@@ -56,15 +57,27 @@ static void app_heart_beat_task(void *args)
     int print_count = 0;
     static char buf[100];
 
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(33));
-        adc_get_voltage(&g_sys_vol);
-        sprintf(buf, "bat:%d", g_sys_vol);
-        ucp_send_heart_beat((uint8_t *)buf, strlen(buf));
+//    while (1) {
+//        vTaskDelay(pdMS_TO_TICKS(33));
+//        adc_get_voltage(&g_sys_vol);
+//        sprintf(buf, "bat:%d", g_sys_vol);
+//        ucp_send_heart_beat((uint8_t *)buf, strlen(buf));
+//
+//        print_count++;
+//        if (0 == print_count % 30)
+//            ucp_print_stats();
+//    }
 
-        print_count++;
-        if (0 == print_count % 30)
-            ucp_print_stats();
+    while(1) {
+
+        gpio_set_level(GPIO_NUM_11, 1);
+        gpio_set_level(GPIO_NUM_12, 1);
+        gpio_set_level(GPIO_NUM_13, 1);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        gpio_set_level(GPIO_NUM_11, 0);
+        gpio_set_level(GPIO_NUM_12, 0);
+        gpio_set_level(GPIO_NUM_13, 0);
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
 
     vTaskDelete(NULL);

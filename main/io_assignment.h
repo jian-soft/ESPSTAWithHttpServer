@@ -23,16 +23,20 @@ extern "C" {
 #define RMT_LED_STRIP_GPIO_NUM      GPIO_NUM_20 //U0RxD, ok
 
 //battery voytage ADC
-#define EXAMPLE_ADC1_CHAN0          ADC_CHANNEL_2  //GPIO2
+#define ADC_CHANNEL_BAT_VOL          ADC_CHANNEL_2  //GPIO2
+#define EXAMPLE_ADC1_BAT_VOL          ADC_CHANNEL_2  //GPIO2
+
 
 
 //GPIO
 #define DRV8833_ENABLE_IO   GPIO_NUM_3     //output
+
 #define MAX98357_ENABLE_IO  GPIO_NUM_21    //output, U0TxD
-#define ME6212_ENABLE_IO    GPIO_NUM_21     //output, U0TxD
 #define M1_SPEED_CNT        GPIO_NUM_0      //input, isr
 #define M2_SPEED_CNT        GPIO_NUM_1      //input, isr
-
+#define BOARD_LED1          GPIO_NUM_12
+#define BOARD_LED2          GPIO_NUM_13
+#define LAST_GPIO           GPIO_NUM_11
 
 
 

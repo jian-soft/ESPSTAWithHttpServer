@@ -133,6 +133,16 @@ void gpio_init(void)
     gpio_isr_handler_add(M1_SPEED_CNT, gpio_isr_handler, (void*) M1_SPEED_CNT);
     //hook isr handler for specific gpio pin
     gpio_isr_handler_add(M2_SPEED_CNT, gpio_isr_handler, (void*) M2_SPEED_CNT);
+
+    //GPIO11~13 test
+    gpio_config_t io_conf2 = {};
+    io_conf2.intr_type = GPIO_INTR_DISABLE;
+    io_conf2.mode = GPIO_MODE_OUTPUT;
+    io_conf2.pin_bit_mask = (1ULL<<BOARD_LED1) | (1ULL<<BOARD_LED2) | (1ULL<<LAST_GPIO);
+    io_conf2.pull_down_en = 0;
+    io_conf2.pull_up_en = 1;
+    gpio_config(&io_conf2);
+
 }
 
 
